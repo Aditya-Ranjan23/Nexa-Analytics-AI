@@ -29,8 +29,12 @@ def resolve_chat_session(request, session_id, role: str, title: str) -> ChatSess
                 session_id,
                 request.user.id if request.user.is_authenticated else "anonymous",
             )
+    # Ensure Django session key exists before binding to anonymous session.
+    if not request.user.is_authenticated and not request.session.session_key:
+        request.session.save()
     return ChatSession.objects.create(
         user=request.user if request.user.is_authenticated else None,
+        session_key="" if request.user.is_authenticated else (request.session.session_key or ""),
         role=role,
         title=title[:80],
     )

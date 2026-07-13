@@ -2,11 +2,14 @@
 
 | Document | Description |
 |----------|-------------|
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | Official system architecture (Phase 1 RC) |
-| [STABILIZATION.md](./STABILIZATION.md) | ADR log — Iterations 1–3 |
-| [TECHNICAL_DEBT.md](./TECHNICAL_DEBT.md) | Known issues register (18 items) |
-| [PHASE1_RETROSPECTIVE.md](./PHASE1_RETROSPECTIVE.md) | Phase 1 summary and sign-off |
-| [PHASE2_ROADMAP.md](./PHASE2_ROADMAP.md) | Prioritized Phase 2 plan |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | Official system architecture |
+| [STABILIZATION.md](./STABILIZATION.md) | ADR log (Phase 1 + 1.5) |
+| [TECHNICAL_DEBT.md](./TECHNICAL_DEBT.md) | Known issues register |
+| [DEPLOYMENT.md](./DEPLOYMENT.md) | Production deployment guide |
+| [SECURITY.md](./SECURITY.md) | SSRF and security checklist |
+| [CHANGELOG.md](./CHANGELOG.md) | Version history |
+| [PHASE1_RETROSPECTIVE.md](./PHASE1_RETROSPECTIVE.md) | Phase 1 summary |
+| [PHASE2_ROADMAP.md](./PHASE2_ROADMAP.md) | Phase 2 plan |
 
 **Quick verify:**
 

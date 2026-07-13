@@ -31,4 +31,9 @@ def resolve_dashboard_state(request) -> DashboardState:
 def session_belongs_to_request(session: ChatSession, request) -> bool:
     if request.user.is_authenticated:
         return session.user_id == request.user.id
-    return session.user_id is None
+    # For anonymous users: session must be bound to the same browser session key.
+    # Guard against requests without session middleware (e.g. RequestFactory in tests).
+    raw_session = getattr(request, "session", None)
+    request_session_key = (raw_session.session_key if raw_session else None) or ""
+    return session.user_id is None and session.session_key == request_session_key
+

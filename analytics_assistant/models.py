@@ -16,6 +16,9 @@ class ChatSession(models.Model):
         null=True,
         blank=True,
     )
+    # Bound to Django session key for anonymous users (TD-003 fix).
+    # Blank for authenticated users (ownership is via FK to user).
+    session_key = models.CharField(max_length=64, blank=True, default="", db_index=True)
     role = models.CharField(max_length=32, choices=ROLE_CHOICES, default="team_member")
     title = models.CharField(max_length=120, default="New conversation")
     created_at = models.DateTimeField(auto_now_add=True)

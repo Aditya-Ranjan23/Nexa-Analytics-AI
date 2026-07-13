@@ -202,18 +202,21 @@ Configuration: `NVIDIA_API_KEY`, `NVIDIA_BASE_URL`, `NVIDIA_MODEL` in `.env`.
 
 ---
 
-## 9. Security Controls (Phase 1)
+## 9. Security Controls (Phase 1.5)
 
 | Control | Status |
 |---------|--------|
 | CSRF on POST endpoints | Enabled (frontend sends `X-CSRFToken`) |
 | Chat session ownership (authenticated) | Enforced |
-| SSRF guard (IP literal + hostname blocklist) | Partial |
+| SSRF guard (scheme, host, IP literal, DNS resolve) | **Implemented** (ADR-018) |
+| SSRF via HTTP redirect chains | **Not implemented** (TD-019) |
 | PostgreSQL table name validation | Enforced |
 | Upload error message sanitization | Enforced |
 | API authentication / rate limiting | **Not implemented** |
-| DNS-resolved SSRF protection | **Not implemented** |
+| Production config validation | **Implemented** (ADR-019) |
 | Anonymous chat session isolation | **Not implemented** |
+
+See `docs/DEPLOYMENT.md` and `docs/SECURITY.md`.
 
 ---
 
@@ -221,8 +224,9 @@ Configuration: `NVIDIA_API_KEY`, `NVIDIA_BASE_URL`, `NVIDIA_MODEL` in `.env`.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `DEBUG` | `True` | Django debug mode |
-| `DJANGO_SECRET_KEY` | insecure default | Session signing |
+| `DJANGO_ENV` | `development` | `development` \| `staging` \| `production` |
+| `DEBUG` | `True` (dev) / `False` (staging/prod) | Django debug mode |
+| `DJANGO_SECRET_KEY` | insecure dev fallback | Session signing |
 | `LOG_LEVEL` | `INFO` | Application logging |
 | `NVIDIA_API_KEY` | empty | AI features |
 | `ANALYTICS_SOURCE` | `csv` | `csv` or `postgres` |
@@ -236,7 +240,7 @@ See `.env.example` for full list.
 
 ```bash
 python manage.py check
-python manage.py test analytics_assistant   # 26 tests
+python manage.py test analytics_assistant   # 31 tests
 ```
 
 Test categories: schema, roles, URL safety, analytics engines, dataset pipeline, chat scoping, API integration.
@@ -250,7 +254,7 @@ Test categories: schema, roles, URL safety, analytics engines, dataset pipeline,
 | `docs/STABILIZATION.md` | ADR log (Iterations 1–3) |
 | `docs/TECHNICAL_DEBT.md` | Known issues register |
 | `docs/PHASE1_RETROSPECTIVE.md` | Phase 1 summary |
-| `docs/PHASE2_ROADMAP.md` | Next-phase plan |
+| `docs/SECURITY.md` | SSRF and production security notes |
 
 ---
 

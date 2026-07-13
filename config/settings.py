@@ -15,6 +15,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from config.env_validation import INSECURE_DEV_SECRET_KEY, validate_deployment_env
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -22,20 +24,23 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 load_dotenv(BASE_DIR / ".env.txt")
 
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
+DJANGO_ENV = os.getenv("DJANGO_ENV", "development").strip().lower()
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv(
-    "DJANGO_SECRET_KEY",
-    "django-insecure-on$ras0o5e_l6+_qo4f9%)-cqrteb(7i6fwgj$mlyfvdmrkk!k",
-)
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", INSECURE_DEV_SECRET_KEY)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DEBUG", "True").lower() == "true"
+_debug_default = "True" if DJANGO_ENV == "development" else "False"
+DEBUG = os.getenv("DEBUG", _debug_default).lower() == "true"
 
-ALLOWED_HOSTS = [host.strip() for host in os.getenv("ALLOWED_HOSTS", "*").split(",")]
+ALLOWED_HOSTS = [host.strip() for host in os.getenv("ALLOWED_HOSTS", "*").split(",") if host.strip()]
+
+validate_deployment_env(
+    django_env=DJANGO_ENV,
+    debug=DEBUG,
+    secret_key=SECRET_KEY,
+    allowed_hosts=ALLOWED_HOSTS,
+)
 
 
 # Application definition
@@ -137,6 +142,30 @@ NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
 NVIDIA_MODEL = os.getenv("NVIDIA_MODEL", "meta/llama-3.1-70b-instruct")
 ANALYTICS_SOURCE = os.getenv("ANALYTICS_SOURCE", "csv")
 ANALYTICS_TABLE = os.getenv("ANALYTICS_TABLE", "analytics_sales")
+
+# Upload size limit (bytes): default 25 MB, override via MAX_UPLOAD_MB env var.
+_MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "25"))
+MAX_UPLOAD_BYTES = _MAX_UPLOAD_MB * 1024 * 1024
+# Enforce at Django's multipart parser level as well.
+DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_BYTES
+
+# Django REST Framework
+REST_FRAMEWORK = {
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        # Base rates — configurable via environment for deployment tuning.
+        "anon": os.getenv("THROTTLE_ANON_RATE", "60/minute"),
+        "user": os.getenv("THROTTLE_USER_RATE", "120/minute"),
+        # Endpoint-specific scoped throttles (applied in views).
+        "chat_anon": os.getenv("THROTTLE_CHAT_ANON_RATE", "20/minute"),
+        "chat_user": os.getenv("THROTTLE_CHAT_USER_RATE", "40/minute"),
+        "upload_anon": os.getenv("THROTTLE_UPLOAD_ANON_RATE", "10/minute"),
+        "upload_user": os.getenv("THROTTLE_UPLOAD_USER_RATE", "20/minute"),
+    },
+}
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 

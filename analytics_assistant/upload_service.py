@@ -1,10 +1,10 @@
 """Dataset upload, activation, and URL ingestion."""
 
 import logging
+import mimetypes
 from pathlib import Path
 
 import pandas as pd
-import requests
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
@@ -16,11 +16,37 @@ from .models import DatasetUpload
 from .request_context import resolve_dashboard_state
 from .schema import validate_dataset_columns
 from .services import generate_dashboard_blueprint
-from .url_safety import validate_public_http_url
+from .url_safety import build_safe_session, validate_public_http_url
 
 logger = logging.getLogger(__name__)
 
 ALLOWED_SUFFIXES = (".csv", ".xlsx", ".xls")
+_ALLOWED_MIME_TYPES = frozenset({
+    "text/csv",
+    "text/plain",
+    "application/csv",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/octet-stream",  # common fallback for binary files served without type
+})
+# Default: 25 MB; override via MAX_UPLOAD_BYTES in settings / environment.
+MAX_UPLOAD_BYTES: int = getattr(settings, "MAX_UPLOAD_BYTES", 25 * 1024 * 1024)
+
+
+def _validate_upload_size(size_bytes: int, label: str = "Upload") -> None:
+    """Raise ValueError if the file exceeds the configured size limit."""
+    if size_bytes > MAX_UPLOAD_BYTES:
+        mb = MAX_UPLOAD_BYTES // (1024 * 1024)
+        raise ValueError(f"{label} exceeds the maximum allowed size of {mb} MB.")
+
+
+def _validate_mime_type(path: Path) -> None:
+    """Raise ValueError if the file's MIME type is not in the allowed set."""
+    mime, _ = mimetypes.guess_type(str(path))
+    if mime and mime.lower() not in _ALLOWED_MIME_TYPES:
+        raise ValueError(
+            f"File type '{mime}' is not allowed. Upload CSV or Excel files only."
+        )
 
 
 def import_detail(import_meta: dict) -> str:
@@ -100,8 +126,15 @@ def process_file_upload(request, upload: UploadedFile) -> dict:
     if suffix not in ALLOWED_SUFFIXES:
         raise ValueError("Only CSV or Excel files are allowed.")
 
+    # Size check before writing to disk.
+    _validate_upload_size(upload.size, label="File")
+
     storage_name = default_storage.save(f"datasets/{upload.name}", upload)
     stored_file_path = Path(settings.MEDIA_ROOT) / storage_name
+
+    # MIME type check on the saved file.
+    _validate_mime_type(stored_file_path)
+
     df, import_meta = load_tabular_from_path(stored_file_path)
     is_valid, missing, _mode = validate_dataset_columns(df.columns.tolist())
     if not is_valid:
@@ -125,8 +158,12 @@ def process_file_upload(request, upload: UploadedFile) -> dict:
 
 def fetch_url_content(source_url: str) -> tuple[bytes, str]:
     safe_url = validate_public_http_url(source_url)
-    response = requests.get(safe_url, timeout=40)
+    session = build_safe_session()
+    response = session.get(safe_url, timeout=40)
     response.raise_for_status()
+    # Size check on remote content before accepting.
+    content_length = len(response.content)
+    _validate_upload_size(content_length, label="Remote file")
     suffix = ".xlsx" if ".xlsx" in safe_url.lower() else ".csv"
     return response.content, suffix
 

@@ -199,7 +199,30 @@ Remove upload-time copy to `data/sales_data.csv`.
 | Replace SQLite with PostgreSQL | Config-ready; migration is ops task |
 | Frontend XSS hardening for insight headlines | Low risk (server-generated); revisit with auth |
 | Anonymous chat session binding to Django session key | Requires model migration; tracked as risk |
-| DNS-resolved SSRF protection | Tracked in `docs/TECHNICAL_DEBT.md` TD-001 |
+| DNS-resolved SSRF protection | **Done** — Phase 1.5 Iter 1 (`docs/SECURITY.md`) |
+| SSRF via HTTP redirects | Tracked as TD-019 |
+
+---
+
+## Phase 1.5 — Deployment Hardening
+
+### ADR-019: Production environment validation
+
+**Decision:** Add `config/env_validation.py` with `validate_deployment_env()`. Call at end of `settings.py`. Add `settings_production.py` entrypoint.
+
+**Why:** Insecure `DEBUG` and default `SECRET_KEY` allowed accidental production deploy (TD-002).
+
+**Impact:** Development unchanged (`DJANGO_ENV=development` default). Staging/production fail fast on misconfiguration.
+
+---
+
+### ADR-018: DNS-aware SSRF validation
+
+**Decision:** Resolve URL hostnames via `socket.getaddrinfo` before fetch; reject if any resolved address is private, loopback, link-local, reserved, or multicast. Block embedded URL credentials.
+
+**Why:** IP-literal and hostname blocklists alone allowed DNS rebinding to internal networks (TD-001).
+
+**Impact:** `validate_public_http_url()` accepts optional `resolver` for tests. Redirect chains remain unvalidated (TD-019).
 
 ---
 

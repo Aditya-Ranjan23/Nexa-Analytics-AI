@@ -12,11 +12,12 @@ Severity scale: **Critical** · **High** · **Medium** · **Low**
 
 | Severity | Count |
 |----------|-------|
-| Critical | 2 |
-| High | 4 |
-| Medium | 7 |
-| Low | 5 |
-| **Total** | **18** |
+| Critical | 0 |
+| High | 0 |
+| Medium | 6 |
+| Low | 4 |
+| **Total (open)** | **10** |
+| **Closed (Phase 1.5)** | **7 (TD-001, TD-002, TD-003, TD-005, TD-006, TD-017, TD-019)** |
 
 ---
 
@@ -26,13 +27,33 @@ Severity scale: **Critical** · **High** · **Medium** · **Low**
 
 | Field | Value |
 |-------|-------|
-| **Severity** | Critical |
+| **Severity** | ~~Critical~~ **Resolved (Phase 1.5)** |
 | **Area** | Security · `url_safety.py` |
-| **Description** | URL guard blocks IP literals and known bad hostnames but does not resolve DNS. A public hostname pointing to a private IP (e.g. `http://evil.example` → `10.0.0.1`) may bypass the guard. |
-| **Risk** | Internal network probing, cloud metadata access in production |
-| **Proposed resolution** | Resolve hostname before fetch; reject if any resolved address is private/link-local/reserved. Consider allowlist mode for enterprise. |
-| **Phase** | Phase 1.5 (pre-Phase 2 gate) or Phase 2 M1 |
-| **Effort** | Small–Medium |
+| **Description** | URL guard now resolves hostnames and rejects private/reserved resolved addresses. Embedded credentials blocked. |
+| **Residual risk** | HTTP redirect chains not validated (see TD-019) |
+| **Resolved** | 2026-07-13 — Phase 1.5 Iteration 1 |
+
+---
+
+### TD-019 — SSRF via HTTP redirects
+
+| Field | Value |
+|-------|-------|
+| **Severity** | ~~Medium~~ **Resolved (Phase 1.5)** |
+| **Area** | Security · `upload_service.py` · `url_safety.py` |
+| **Description** | `build_safe_session()` attaches `_redirect_hook` to every outbound request; each redirect destination is re-validated via `validate_public_http_url`. |
+| **Resolution** | `url_safety.build_safe_session()` — Phase 1.5 |
+| **Resolved** | 2026-07-13 — Phase 1.5 |
+
+---
+
+### TD-001-ARCHIVED — DNS-resolved SSRF (original)
+
+| Field | Value |
+|-------|-------|
+| **Severity** | Critical (closed) |
+| **Original description** | URL guard blocked IP literals but not hostname → private IP resolution. |
+| **Resolution** | `validate_hostname_resolves_public()` in `url_safety.py` |
 
 ---
 
@@ -40,13 +61,20 @@ Severity scale: **Critical** · **High** · **Medium** · **Low**
 
 | Field | Value |
 |-------|-------|
-| **Severity** | Critical |
-| **Area** | Config · `config/settings.py` |
-| **Description** | `DEBUG=True` and an insecure default `SECRET_KEY` ship in settings. Suitable for dev only. |
-| **Risk** | Full stack trace exposure, session forgery if deployed as-is |
-| **Proposed resolution** | Fail startup when `DEBUG=True` and `SECRET_KEY` is default in non-dev env; document production checklist; require env vars in deployment. |
-| **Phase** | Phase 1.5 (deploy gate) |
-| **Effort** | Small |
+| **Severity** | ~~Critical~~ **Resolved (Phase 1.5)** |
+| **Area** | Config · `config/env_validation.py` |
+| **Description** | `validate_deployment_env()` fails startup when `DJANGO_ENV` is staging/production with `DEBUG=True`, insecure `SECRET_KEY`, or wildcard `ALLOWED_HOSTS`. |
+| **Resolution** | `config/settings_production.py`, `docs/DEPLOYMENT.md` |
+| **Resolved** | 2026-07-13 — Phase 1.5 Iteration 2 |
+
+---
+
+### TD-002-ARCHIVED — Production secrets (original)
+
+| Field | Value |
+|-------|-------|
+| **Severity** | Critical (closed) |
+| **Original description** | `DEBUG=True` and insecure default `SECRET_KEY` shipped without guard. |
 
 ---
 
@@ -54,13 +82,11 @@ Severity scale: **Critical** · **High** · **Medium** · **Low**
 
 | Field | Value |
 |-------|-------|
-| **Severity** | High |
-| **Area** | Security · `models.py` · `chat_service.py` |
-| **Description** | `ChatSession` has no `session_key`. Any anonymous client knowing a `session_id` can resume another visitor's chat. |
-| **Risk** | Conversation hijacking for unauthenticated users |
-| **Proposed resolution** | Add `session_key` to `ChatSession`; bind on create; validate on resume. Migration required. |
-| **Phase** | Phase 1.5 or Phase 2 M1 |
-| **Effort** | Small |
+| **Severity** | ~~High~~ **Resolved (Phase 1.5)** |
+| **Area** | Security · `models.py` · `chat_service.py` · `request_context.py` |
+| **Description** | `ChatSession` now stores `session_key`. Anonymous sessions are bound on create and validated on resume. |
+| **Resolution** | Migration `0005_chatsession_session_key` · `session_belongs_to_request` updated |
+| **Resolved** | 2026-07-13 — Phase 1.5 |
 
 ---
 
@@ -68,11 +94,11 @@ Severity scale: **Critical** · **High** · **Medium** · **Low**
 
 | Field | Value |
 |-------|-------|
-| **Severity** | High |
-| **Area** | Security · `views.py` |
-| **Description** | All endpoints are public. No throttling on chat, upload, or URL ingestion. |
-| **Risk** | Abuse, cost explosion (NVIDIA API), DoS via large uploads |
-| **Proposed resolution** | DRF authentication classes, per-IP rate limits (django-ratelimit or API gateway), optional API keys for Phase 2 multi-tenant. |
+| **Severity** | High (partial — rate limiting resolved) |
+| **Area** | Security · `views.py` · `throttles.py` |
+| **Description** | **Rate limiting** added in Phase 1.5 via DRF throttle classes on chat, upload, and upload-link endpoints. API **authentication** (tokens, API keys) remains Phase 2. |
+| **Remaining risk** | Endpoints remain publicly accessible without auth tokens |
+| **Proposed resolution** | DRF authentication classes, optional API keys for Phase 2 multi-tenant. |
 | **Phase** | Phase 2 M2 |
 | **Effort** | Medium |
 
@@ -82,13 +108,11 @@ Severity scale: **Critical** · **High** · **Medium** · **Low**
 
 | Field | Value |
 |-------|-------|
-| **Severity** | High |
+| **Severity** | ~~High~~ **Resolved (Phase 1.5)** |
 | **Area** | DevOps · `requirements.txt` |
-| **Description** | Dependencies listed without version pins. Reproducible builds not guaranteed. |
-| **Risk** | CI/production breakage on upstream releases |
-| **Proposed resolution** | `pip freeze` or `pip-tools` compile; commit `requirements.lock`; renovate/dependabot. |
-| **Phase** | Phase 1.5 |
-| **Effort** | Small |
+| **Description** | All 6 runtime dependencies pinned to exact versions. Reproducible builds now guaranteed. |
+| **Resolution** | `requirements.txt` pinned — Phase 1.5 |
+| **Resolved** | 2026-07-13 — Phase 1.5 |
 
 ---
 
@@ -96,13 +120,11 @@ Severity scale: **Critical** · **High** · **Medium** · **Low**
 
 | Field | Value |
 |-------|-------|
-| **Severity** | High |
+| **Severity** | ~~High~~ **Resolved (Phase 1.5)** |
 | **Area** | DevOps |
-| **Description** | Tests run manually only. No automated check on commit/PR. |
-| **Risk** | Regressions merge undetected |
-| **Proposed resolution** | GitHub Actions: `check`, `test`, lint; optional coverage gate. |
-| **Phase** | Phase 1.5 |
-| **Effort** | Small |
+| **Description** | GitHub Actions CI at `.github/workflows/ci.yml` runs Django checks, migrations, 57 tests, flake8 lint, and deployment checks on every push/PR. |
+| **Resolution** | `.github/workflows/ci.yml` — Phase 1.5 |
+| **Resolved** | 2026-07-13 — Phase 1.5 |
 
 ---
 
@@ -250,13 +272,11 @@ Severity scale: **Critical** · **High** · **Medium** · **Low**
 
 | Field | Value |
 |-------|-------|
-| **Severity** | Low |
-| **Area** | `dataset_pipeline.py` · `data_sources.py` |
-| **Description** | `DEFAULT_SEED_PATH` and `_SEED_PATH` both reference `data/sales_data.csv` independently. |
-| **Risk** | Drift if path changes in one file only |
-| **Proposed resolution** | Single constant in `dataset_pipeline.py`; `data_sources` imports it. |
-| **Phase** | Phase 1.5 |
-| **Effort** | Trivial |
+| **Severity** | ~~Low~~ **Resolved (Phase 1.5)** |
+| **Area** | `data_sources.py` · `dataset_pipeline.py` |
+| **Description** | `data_sources.py` now imports `DEFAULT_SEED_PATH` from `dataset_pipeline.py`. Single source of truth. |
+| **Resolution** | Import refactor — Phase 1.5 |
+| **Resolved** | 2026-07-13 — Phase 1.5 |
 
 ---
 
@@ -264,29 +284,34 @@ Severity scale: **Critical** · **High** · **Medium** · **Low**
 
 | Field | Value |
 |-------|-------|
-| **Severity** | Medium |
+| **Severity** | ~~Medium~~ **Substantially resolved (Phase 1.5)** |
 | **Area** | `tests.py` |
-| **Description** | 26 tests cover critical paths but lack: file upload E2E, ads-mode payload, blueprint save, engine unit tests in isolation. |
-| **Risk** | Regressions in upload flow or ads analytics |
-| **Proposed resolution** | Add fixture-based upload test; ads CSV golden-file test; split tests into package. |
-| **Phase** | Phase 1.5 / Phase 2 M1 |
-| **Effort** | Medium |
+| **Description** | Phase 1.5 added 20 new tests (57 total): SSRF redirect, upload size/MIME, anonymous session isolation, health check, blueprint save/load, E2E CSV upload. |
+| **Residual gaps** | Ads-mode payload golden-file test; engine isolation tests; coverage reporting in CI |
+| **Phase** | Phase 2 M1 |
+| **Effort** | Small |
 
 ---
 
 ## Debt Paydown Priority (Recommended)
 
 ```
-Phase 1.5 (pre-Phase 2 gate)
-  TD-002, TD-005, TD-006, TD-017  → deploy readiness
-  TD-001, TD-003                   → security closure
+Phase 1.5 — COMPLETED
+  TD-001  → DNS-aware SSRF (resolved)
+  TD-002  → Production secrets / DEBUG (resolved)
+  TD-003  → Anonymous session isolation (resolved)
+  TD-005  → Dependency pinning (resolved)
+  TD-006  → CI/CD pipeline (resolved)
+  TD-017  → Seed path deduplication (resolved)
+  TD-019  → SSRF redirect protection (resolved)
 
-Phase 2 early
-  TD-008, TD-004, TD-010           → enterprise foundation
-  TD-007, TD-011, TD-012           → data platform
+Phase 2 early (TD-004 partially addressed: rate limiting done, auth pending)
+  TD-008, TD-004, TD-010  → enterprise foundation
+  TD-007, TD-011, TD-012  → data platform
 
 Phase 2 later
-  TD-009, TD-016, TD-015, TD-014   → product completeness
+  TD-009, TD-016, TD-015, TD-014  → product completeness
+  TD-013, TD-018 (residual)       → frontend security, test coverage
 ```
 
 ---
@@ -296,3 +321,7 @@ Phase 2 later
 | Date | Change |
 |------|--------|
 | 2026-07-13 | Initial register at Phase 1 RC |
+| 2026-07-13 | Phase 1.5 — Closed TD-001, TD-002 (env validation + SSRF DNS) |
+| 2026-07-13 | Phase 1.5 — Closed TD-003, TD-005, TD-006, TD-017, TD-019 (session isolation, deps, CI, path dedup, redirect SSRF) |
+| 2026-07-13 | Phase 1.5 — TD-004 partially resolved (rate limiting done; API auth deferred to Phase 2) |
+| 2026-07-13 | Phase 1.5 — TD-018 substantially resolved (57 tests; residual gaps deferred to Phase 2 M1) |

@@ -1,16 +1,16 @@
 import logging
 import re
-from pathlib import Path
 
 import pandas as pd
 from django.db import connection
 
 from django.conf import settings
 
+from .dataset_pipeline import DEFAULT_SEED_PATH  # Single source of truth (TD-017)
+
 logger = logging.getLogger(__name__)
 
 _TABLE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-_SEED_PATH = Path(settings.BASE_DIR) / "data" / "sales_data.csv"
 
 
 class BaseDataSource:
@@ -20,10 +20,10 @@ class BaseDataSource:
 
 class CsvDataSource(BaseDataSource):
     def load(self) -> pd.DataFrame:
-        if not _SEED_PATH.exists():
-            logger.warning("Default seed dataset missing at %s", _SEED_PATH)
+        if not DEFAULT_SEED_PATH.exists():
+            logger.warning("Default seed dataset missing at %s", DEFAULT_SEED_PATH)
             return pd.DataFrame()
-        return pd.read_csv(_SEED_PATH)
+        return pd.read_csv(DEFAULT_SEED_PATH)
 
 
 class PostgresDataSource(BaseDataSource):
