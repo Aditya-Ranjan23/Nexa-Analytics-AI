@@ -1,0 +1,210 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nexa Analytics AI Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=3" />
+</head>
+<body>
+    <div class="orb orb-one"></div>
+    <div class="orb orb-two"></div>
+    <main class="container">
+        <header class="hero">
+            <p class="eyebrow">AI-Powered Analytics Assistant</p>
+            <h1>Nexa Insights Command Center</h1>
+            <p class="subtitle">
+                Monitor growth metrics and ask questions in plain language, powered by your NVIDIA model integration.
+            </p>
+            <div class="hero-meta">
+                <div class="role-picker">
+                    <label for="roleSelect">Dashboard Role</label>
+                    <select id="roleSelect">
+                        <option value="ceo">CEO</option>
+                        <option value="marketing_manager">Marketing Manager</option>
+                        <option value="team_member" selected>Team Member</option>
+                    </select>
+                </div>
+                <div class="dataset-badge" id="datasetBadge" hidden>
+                    <span class="badge-dot"></span>
+                    <span id="datasetBadgeText">No dataset</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="tabs-shell">
+            <nav class="tab-bar" role="tablist" aria-label="Main sections">
+                <button class="tab-link active" type="button" role="tab" aria-selected="true" aria-controls="tab-dashboard" data-tab="dashboard" id="tab-btn-dashboard">
+                    Dashboard
+                </button>
+                <button class="tab-link" type="button" role="tab" aria-selected="false" aria-controls="tab-data" data-tab="data" id="tab-btn-data">
+                    Data Upload
+                </button>
+                <button class="tab-link" type="button" role="tab" aria-selected="false" aria-controls="tab-insights" data-tab="insights" id="tab-btn-insights">
+                    AI Insights
+                </button>
+                <button class="tab-link" type="button" role="tab" aria-selected="false" aria-controls="tab-assistant" data-tab="assistant" id="tab-btn-assistant">
+                    Ask AI
+                </button>
+            </nav>
+
+            <div class="tab-panels">
+            <!-- Dashboard -->
+            <section class="tab-panel active" id="tab-dashboard" role="tabpanel" aria-labelledby="tab-btn-dashboard">
+                <div class="section-head">
+                    <div>
+                        <h2 class="section-title">Performance Overview</h2>
+                        <p class="section-desc" id="dashboardDesc">Key metrics and visual analysis from your active dataset.</p>
+                    </div>
+                    <button type="button" class="ghost-btn" id="refreshDashboardBtn">Refresh</button>
+                </div>
+                <section class="kpi-grid" id="kpiGrid"></section>
+                <section class="charts-grid" id="chartsGrid"></section>
+            </section>
+
+            <!-- Data Upload -->
+            <section class="tab-panel" id="tab-data" role="tabpanel" aria-labelledby="tab-btn-data">
+                <div class="section-head">
+                    <div>
+                        <h2 class="section-title">Data Connectors</h2>
+                        <p class="section-desc">Upload a file, ingest from a URL, or tune how the dashboard reads your data.</p>
+                    </div>
+                </div>
+
+                <div class="data-layout">
+                    <div class="data-main">
+                        <article class="panel upload-card">
+                            <div class="panel-head">
+                                <h3>File Upload</h3>
+                                <span class="panel-note">CSV, XLSX, XLS</span>
+                            </div>
+                            <form id="uploadForm">
+                                <label class="dropzone" id="dropzone" for="datasetFile">
+                                    <input id="datasetFile" type="file" accept=".csv,.xlsx,.xls" hidden />
+                                    <span class="dropzone-icon" aria-hidden="true">⬆</span>
+                                    <span class="dropzone-title">Drag & drop your dataset here</span>
+                                    <span class="dropzone-hint">or click to browse files</span>
+                                    <span class="dropzone-file" id="selectedFileName">No file selected</span>
+                                </label>
+                                <button class="primary-btn full-width" type="submit" id="uploadSubmitBtn">Upload Dataset</button>
+                            </form>
+                        </article>
+
+                        <article class="panel upload-card">
+                            <div class="panel-head">
+                                <h3>URL Ingestion</h3>
+                                <span class="panel-note">Remote CSV or Excel</span>
+                            </div>
+                            <form id="urlForm" class="url-form">
+                                <label for="datasetUrl">Public dataset link</label>
+                                <input id="datasetUrl" type="url" placeholder="https://example.com/data.csv" />
+                                <button class="primary-btn full-width" type="submit">Ingest From Link</button>
+                            </form>
+                        </article>
+
+                        <article class="panel status-card">
+                            <div class="panel-head">
+                                <h3>Active Dataset</h3>
+                                <button type="button" class="ghost-btn small" id="runIngestionBtn">Run Sync Job</button>
+                            </div>
+                            <div class="dataset-stats" id="datasetStats">
+                                <div class="stat-item">
+                                    <span class="stat-label">Records</span>
+                                    <span class="stat-value" id="statRecords">—</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Columns</span>
+                                    <span class="stat-value" id="statColumns">—</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Mode</span>
+                                    <span class="stat-value" id="statMode">—</span>
+                                </div>
+                            </div>
+                            <div id="dataStatus" class="status-banner" role="status" hidden></div>
+                        </article>
+                    </div>
+
+                    <article class="panel blueprint-panel">
+                        <div class="panel-head">
+                            <h3>Blueprint Editor</h3>
+                            <span class="panel-note">KPI & chart plan</span>
+                        </div>
+                        <p class="blueprint-hint">Customize which metrics and dimensions power your dashboard. JSON is validated on save.</p>
+                        <textarea id="blueprintEditor" class="blueprint-editor" spellcheck="false" placeholder='{"kpi_columns": ["Sales", "Profit"], ...}'></textarea>
+                        <div class="blueprint-actions">
+                            <button id="loadBlueprintBtn" class="secondary-btn" type="button">Load Blueprint</button>
+                            <button id="saveBlueprintBtn" class="primary-btn" type="button">Save Blueprint</button>
+                        </div>
+                    </article>
+                </div>
+            </section>
+
+            <!-- AI Insights -->
+            <section class="tab-panel" id="tab-insights" role="tabpanel" aria-labelledby="tab-btn-insights">
+                <div class="section-head">
+                    <div>
+                        <h2 class="section-title">AI Insights</h2>
+                        <p class="section-desc">Narrative summary and auto-detected signals from your data.</p>
+                    </div>
+                    <button type="button" class="ghost-btn" id="refreshInsightsBtn">Regenerate View</button>
+                </div>
+
+                <article class="panel summary-hero" id="summaryHero">
+                    <div class="summary-hero-head">
+                        <span class="summary-label">Executive Summary</span>
+                        <span class="summary-tag" id="insightsModeTag">—</span>
+                    </div>
+                    <div id="aiSummary" class="ai-summary"></div>
+                    <p class="empty-state" id="summaryEmpty" hidden>Upload a dataset to generate an AI-powered executive summary.</p>
+                </article>
+
+                <div class="insights-section-label">Detected Signals</div>
+                <div id="insightsList" class="insights-list"></div>
+                <p class="empty-state centered" id="insightsEmpty" hidden>No insight cards yet. Upload data or switch to a dataset with more columns.</p>
+            </section>
+
+            <!-- Ask AI -->
+            <section class="tab-panel" id="tab-assistant" role="tabpanel" aria-labelledby="tab-btn-assistant">
+                <div class="section-head">
+                    <div>
+                        <h2 class="section-title">Ask the Assistant</h2>
+                        <p class="section-desc">Data-aware answers grounded in your current dashboard metrics.</p>
+                    </div>
+                    <button type="button" class="ghost-btn" id="clearChatBtn">Clear Chat</button>
+                </div>
+
+                <article class="panel assistant-panel">
+                    <div class="prompt-chips" id="promptChips">
+                        <button type="button" class="chip" data-prompt="What are the top trends in my data?">Top trends</button>
+                        <button type="button" class="chip" data-prompt="Which segment is performing best?">Best segment</button>
+                        <button type="button" class="chip" data-prompt="What risks or anomalies should I watch?">Risks & anomalies</button>
+                        <button type="button" class="chip" data-prompt="Give me 3 actionable recommendations.">Recommendations</button>
+                    </div>
+                    <div class="chat-window" id="chatWindow"></div>
+                    <div class="chat-typing" id="chatTyping" hidden>
+                        <span class="typing-dot"></span>
+                        <span class="typing-dot"></span>
+                        <span class="typing-dot"></span>
+                        <span>Assistant is thinking…</span>
+                    </div>
+                    <form id="chatForm" class="chat-form">
+                        <input id="chatInput" type="text" placeholder="Ask about metrics, trends, or what to do next…" autocomplete="off" required />
+                        <button type="submit" class="primary-btn">Send</button>
+                    </form>
+                </article>
+            </section>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+    <script src="{% static 'js/dashboard.js' %}?v=6"></script>
+</body>
+</html>
