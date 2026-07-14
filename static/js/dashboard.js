@@ -34,9 +34,38 @@ const clearChatBtn = document.getElementById("clearChatBtn");
 const promptChips = document.getElementById("promptChips");
 const tabButtons = document.querySelectorAll(".tab-link");
 const tabPanels = document.querySelectorAll(".tab-panel");
+const deactivateDatasetBtn = document.getElementById("deactivateDatasetBtn");
+const libraryList = document.getElementById("libraryList");
 const chartInstances = new Map();
 let sessionId = null;
 let chatWelcomed = false;
+
+// Versioning and Modal DOM Elements
+let activeModalDatasetId = null;
+const versionsModal = document.getElementById("versionsModal");
+const versionsModalTitle = document.getElementById("versionsModalTitle");
+const versionsTableBody = document.getElementById("versionsTableBody");
+const closeVersionsModalBtn = document.getElementById("closeVersionsModalBtn");
+const versionUploadForm = document.getElementById("versionUploadForm");
+const versionFileInput = document.getElementById("versionFileInput");
+const versionFileSelectBtn = document.getElementById("versionFileSelectBtn");
+const versionFileName = document.getElementById("versionFileName");
+const versionUrlForm = document.getElementById("versionUrlForm");
+const versionUrlInput = document.getElementById("versionUrlInput");
+const versionUploadStatus = document.getElementById("versionUploadStatus");
+const compareBtn = document.getElementById("compareBtn");
+const compareResultsSection = document.getElementById("compareResultsSection");
+const closeCompareBtn = document.getElementById("closeCompareBtn");
+const compareV1Num = document.getElementById("compareV1Num");
+const compareV1Rows = document.getElementById("compareV1Rows");
+const compareV2Num = document.getElementById("compareV2Num");
+const compareV2Rows = document.getElementById("compareV2Rows");
+const compareRowDiffVal = document.getElementById("compareRowDiffVal");
+const compareAddedCount = document.getElementById("compareAddedCount");
+const compareAddedCols = document.getElementById("compareAddedCols");
+const compareRemovedCount = document.getElementById("compareRemovedCount");
+const compareRemovedCols = document.getElementById("compareRemovedCols");
+const compareStatsBody = document.getElementById("compareStatsBody");
 
 const TAB_IDS = ["dashboard", "data", "insights", "assistant"];
 const KPI_MAX = 8;
@@ -90,6 +119,10 @@ function switchTab(tabId) {
         requestAnimationFrame(() => {
             chartInstances.forEach((instance) => instance.resize());
         });
+    }
+
+    if (tabId === "data") {
+        loadDatasetLibrary();
     }
 
     if (tabId === "assistant" && !chatWelcomed) {
@@ -600,6 +633,7 @@ uploadForm?.addEventListener("submit", async (event) => {
         }
         setDataStatus(data.detail || `Dataset activated — ${data.rows?.toLocaleString()} rows · ${data.dataset_mode} mode`, "success");
         await loadDashboard();
+        await loadDatasetLibrary();
         switchTab("dashboard");
     } catch (error) {
         setDataStatus(`Upload failed: ${error.message}`, "error");
@@ -629,6 +663,7 @@ urlForm?.addEventListener("submit", async (event) => {
         }
         setDataStatus(data.detail || `URL ingested — ${data.rows?.toLocaleString()} rows · ${data.dataset_mode} mode`, "success");
         await loadDashboard();
+        await loadDatasetLibrary();
         switchTab("dashboard");
     } catch (error) {
         setDataStatus(`URL ingestion failed: ${error.message}`, "error");
@@ -686,12 +721,498 @@ chatForm?.addEventListener("submit", async (event) => {
     }
 });
 
+async function loadDatasetLibrary() {
+    if (!libraryList) return;
+    try {
+        const response = await apiFetch("/api/data/datasets/");
+        if (!response.ok) throw new Error("Failed to fetch dataset list");
+        const datasets = await response.json();
+        
+        if (!datasets.length) {
+            libraryList.innerHTML = '<div class="empty-state centered">No datasets uploaded yet.</div>';
+            return;
+        }
+
+        libraryList.innerHTML = datasets.map(ds => {
+            const activeClass = ds.is_active ? 'active' : '';
+            const activeBadge = ds.is_active ? ' <span class="library-status-badge processed">Active</span>' : '';
+            const statusLabel = ds.is_archived ? 'Archived' : ds.status;
+            const statusClass = ds.is_archived ? 'archived' : ds.status;
+            const formattedDate = new Date(ds.created_at).toLocaleString();
+            
+            return `
+                <div class="library-item ${activeClass}" data-id="${ds.id}">
+                    <div class="library-item-header">
+                        <div class="library-item-title">
+                            📁 ${ds.name || ds.display_name}
+                            ${activeBadge}
+                        </div>
+                        <span class="library-status-badge ${statusClass}">${statusLabel}</span>
+                    </div>
+                    <div class="library-item-meta">
+                        <span>Records: <strong>${ds.row_count.toLocaleString()}</strong></span>
+                        <span>Type: <strong>${ds.source_type}</strong></span>
+                        <span>Uploaded: ${formattedDate}</span>
+                    </div>
+                    ${ds.description ? `<div class="library-item-desc">${ds.description}</div>` : ''}
+                    ${ds.error_message ? `<div class="status-banner error" style="margin-top: 0.5rem; padding: 0.4rem 0.6rem; font-size: 0.76rem;">${ds.error_message}</div>` : ''}
+                    <div class="library-item-actions">
+                        ${!ds.is_active && ds.status === 'processed' ? `<button type="button" class="ghost-btn small activate-ds-btn" data-id="${ds.id}">Activate</button>` : ''}
+                        <button type="button" class="ghost-btn small manage-versions-btn" data-id="${ds.id}" data-name="${ds.name || ds.display_name}">Versions</button>
+                        <button type="button" class="ghost-btn small rename-ds-btn" data-id="${ds.id}" data-name="${ds.name || ds.display_name}">Rename</button>
+                        <button type="button" class="ghost-btn small archive-ds-btn" data-id="${ds.id}">${ds.is_archived ? 'Unarchive' : 'Archive'}</button>
+                        <button type="button" class="ghost-btn small danger delete-ds-btn" style="border-color: rgba(239, 68, 68, 0.35); color: #fca5a5;" data-id="${ds.id}">Delete</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Bind dynamic action buttons
+        libraryList.querySelectorAll(".activate-ds-btn").forEach(btn => {
+            btn.addEventListener("click", (e) => activateDataset(e.target.dataset.id));
+        });
+        libraryList.querySelectorAll(".manage-versions-btn").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                const id = e.target.dataset.id;
+                const name = e.target.dataset.name;
+                openVersionsModal(id, name);
+            });
+        });
+        libraryList.querySelectorAll(".rename-ds-btn").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                const id = e.target.dataset.id;
+                const currentName = e.target.dataset.name;
+                renameDataset(id, currentName);
+            });
+        });
+        libraryList.querySelectorAll(".archive-ds-btn").forEach(btn => {
+            btn.addEventListener("click", (e) => toggleArchiveDataset(e.target.dataset.id));
+        });
+        libraryList.querySelectorAll(".delete-ds-btn").forEach(btn => {
+            btn.addEventListener("click", (e) => deleteDataset(e.target.dataset.id));
+        });
+
+    } catch (error) {
+        libraryList.innerHTML = `<div class="status-banner error">Error loading library: ${error.message}</div>`;
+    }
+}
+
+async function activateDataset(id) {
+    setDataStatus("Activating dataset…", "info");
+    try {
+        const response = await apiFetch(`/api/data/datasets/${id}/activate/`, {
+            method: "POST"
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            setDataStatus(data.detail || "Activation failed.", "error");
+            return;
+        }
+        setDataStatus("Dataset activated successfully.", "success");
+        await loadDashboard();
+        await loadBlueprint();
+        await loadDatasetLibrary();
+    } catch (error) {
+        setDataStatus(`Activation failed: ${error.message}`, "error");
+    }
+}
+
+async function renameDataset(id, currentName) {
+    const newName = prompt("Enter a new name for the dataset:", currentName);
+    if (newName === null) return;
+    const trimmed = newName.trim();
+    if (!trimmed) {
+        alert("Dataset name cannot be empty.");
+        return;
+    }
+    
+    setDataStatus("Renaming dataset…", "info");
+    try {
+        const response = await apiFetch(`/api/data/datasets/${id}/`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: trimmed })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            setDataStatus(data.detail || "Rename failed.", "error");
+            return;
+        }
+        setDataStatus("Dataset renamed.", "success");
+        await loadDashboard();
+        await loadDatasetLibrary();
+    } catch (error) {
+        setDataStatus(`Rename failed: ${error.message}`, "error");
+    }
+}
+
+async function toggleArchiveDataset(id) {
+    setDataStatus("Updating archive status…", "info");
+    try {
+        const response = await apiFetch(`/api/data/datasets/${id}/archive/`, {
+            method: "POST"
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            setDataStatus(data.detail || "Archive toggle failed.", "error");
+            return;
+        }
+        setDataStatus(data.detail, "success");
+        await loadDashboard();
+        await loadDatasetLibrary();
+    } catch (error) {
+        setDataStatus(`Archive failed: ${error.message}`, "error");
+    }
+}
+
+async function deleteDataset(id) {
+    if (!confirm("Are you sure you want to permanently delete this dataset? This action cannot be undone.")) {
+        return;
+    }
+    setDataStatus("Deleting dataset…", "info");
+    try {
+        const response = await apiFetch(`/api/data/datasets/${id}/`, {
+            method: "DELETE"
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            setDataStatus(data.detail || "Deletion failed.", "error");
+            return;
+        }
+        setDataStatus("Dataset deleted successfully.", "success");
+        await loadDashboard();
+        await loadBlueprint();
+        await loadDatasetLibrary();
+    } catch (error) {
+        setDataStatus(`Deletion failed: ${error.message}`, "error");
+    }
+}
+
+deactivateDatasetBtn?.addEventListener("click", async () => {
+    setDataStatus("Resetting dashboard to default seed dataset…", "info");
+    try {
+        const response = await apiFetch("/api/data/datasets/deactivate/", {
+            method: "POST"
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            setDataStatus(data.detail || "Reset failed.", "error");
+            return;
+        }
+        setDataStatus("Dashboard reset to seed dataset.", "success");
+        await loadDashboard();
+        await loadBlueprint();
+        await loadDatasetLibrary();
+    } catch (error) {
+        setDataStatus(`Reset failed: ${error.message}`, "error");
+    }
+});
+
 function initApp() {
     const initialTab = TAB_IDS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "dashboard";
     switchTab(initialTab);
     loadDashboard();
     loadBlueprint();
+    if (initialTab === "data") {
+        loadDatasetLibrary();
+    }
 }
+
+// Modal & Version Control logic
+function openVersionsModal(id, name) {
+    activeModalDatasetId = id;
+    if (versionsModalTitle) {
+        versionsModalTitle.textContent = `Version History: ${name}`;
+    }
+    setVersionUploadStatus("");
+    if (compareResultsSection) compareResultsSection.hidden = true;
+    if (versionsModal) versionsModal.hidden = false;
+    
+    // Clear inputs
+    if (versionFileName) versionFileName.textContent = "No file chosen";
+    if (versionFileInput) versionFileInput.value = "";
+    if (versionUrlInput) versionUrlInput.value = "";
+    
+    loadVersionsTable(id);
+}
+
+function closeVersionsModal() {
+    if (versionsModal) versionsModal.hidden = true;
+    activeModalDatasetId = null;
+}
+
+if (closeVersionsModalBtn) {
+    closeVersionsModalBtn.addEventListener("click", closeVersionsModal);
+}
+
+// Handle file selection click
+if (versionFileSelectBtn && versionFileInput) {
+    versionFileSelectBtn.addEventListener("click", () => versionFileInput.click());
+    versionFileInput.addEventListener("change", () => {
+        const file = versionFileInput.files[0];
+        if (versionFileName) {
+            versionFileName.textContent = file ? file.name : "No file chosen";
+        }
+    });
+}
+
+function setVersionUploadStatus(msg, type = "info") {
+    if (!versionUploadStatus) return;
+    if (!msg) {
+        versionUploadStatus.hidden = true;
+        versionUploadStatus.textContent = "";
+        versionUploadStatus.className = "status-banner";
+        return;
+    }
+    versionUploadStatus.hidden = false;
+    versionUploadStatus.textContent = msg;
+    versionUploadStatus.className = `status-banner ${type}`;
+}
+
+// Upload version file
+versionUploadForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!activeModalDatasetId || !versionFileInput) return;
+    const file = versionFileInput.files[0];
+    if (!file) {
+        setVersionUploadStatus("Please choose a file first.", "error");
+        return;
+    }
+    
+    setVersionUploadStatus("Uploading file version…", "info");
+    const formData = new FormData();
+    formData.append("file", file);
+    
+    try {
+        const response = await apiFetch(`/api/data/datasets/${activeModalDatasetId}/versions/upload/`, {
+            method: "POST",
+            body: formData,
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            setVersionUploadStatus(data.detail || "Upload failed.", "error");
+            return;
+        }
+        setVersionUploadStatus(data.detail || "New version uploaded successfully.", "success");
+        if (versionFileName) versionFileName.textContent = "No file chosen";
+        versionFileInput.value = "";
+        
+        // Refresh
+        await loadDashboard();
+        await loadDatasetLibrary();
+        loadVersionsTable(activeModalDatasetId);
+    } catch (err) {
+        setVersionUploadStatus(`Upload failed: ${err.message}`, "error");
+    }
+});
+
+// Ingest version URL
+versionUrlForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!activeModalDatasetId || !versionUrlInput) return;
+    const url = versionUrlInput.value.trim();
+    if (!url) return;
+    
+    setVersionUploadStatus("Ingesting URL version…", "info");
+    try {
+        const response = await apiFetch(`/api/data/datasets/${activeModalDatasetId}/versions/url/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            setVersionUploadStatus(data.detail || "Ingestion failed.", "error");
+            return;
+        }
+        setVersionUploadStatus(data.detail || "New version URL ingested.", "success");
+        versionUrlInput.value = "";
+        
+        // Refresh
+        await loadDashboard();
+        await loadDatasetLibrary();
+        loadVersionsTable(activeModalDatasetId);
+    } catch (err) {
+        setVersionUploadStatus(`Ingestion failed: ${err.message}`, "error");
+    }
+});
+
+async function loadVersionsTable(datasetId) {
+    if (!versionsTableBody) return;
+    versionsTableBody.innerHTML = '<tr><td colspan="7" class="centered">Loading versions…</td></tr>';
+    
+    try {
+        const response = await apiFetch(`/api/data/datasets/${datasetId}/versions/`);
+        if (!response.ok) throw new Error("Failed to load versions list");
+        const versions = await response.json();
+        
+        if (!versions.length) {
+            versionsTableBody.innerHTML = '<tr><td colspan="7" class="centered">No historical versions stored.</td></tr>';
+            return;
+        }
+        
+        versionsTableBody.innerHTML = versions.map(v => {
+            const activeBadge = v.is_active ? '<span class="library-status-badge processed">Active</span>' : '<span class="library-status-badge archived">Historic</span>';
+            const actionBtn = v.is_active ? '' : `<button type="button" class="ghost-btn small restore-version-btn" data-ver="${v.version_number}">Restore</button>`;
+            const formattedDate = new Date(v.created_at).toLocaleString();
+            
+            return `
+                <tr>
+                    <td><input type="checkbox" class="version-select-cb" data-ver="${v.version_number}" /></td>
+                    <td><strong>v${v.version_number}</strong></td>
+                    <td class="filename-span" title="${v.name || v.source_url}">${v.name || v.source_url}</td>
+                    <td>${v.row_count.toLocaleString()}</td>
+                    <td>${formattedDate}</td>
+                    <td>${activeBadge}</td>
+                    <td style="text-align: right;">${actionBtn}</td>
+                </tr>
+            `;
+        }).join('');
+        
+        // Bind restore buttons
+        versionsTableBody.querySelectorAll(".restore-version-btn").forEach(btn => {
+            btn.addEventListener("click", (e) => restoreVersion(datasetId, e.target.dataset.ver));
+        });
+        
+        // Bind checkbox listeners for comparison
+        versionsTableBody.querySelectorAll(".version-select-cb").forEach(cb => {
+            cb.addEventListener("change", updateCompareButtonState);
+        });
+        
+        updateCompareButtonState();
+    } catch (err) {
+        versionsTableBody.innerHTML = `<tr><td colspan="7" class="centered error">Error: ${err.message}</td></tr>`;
+    }
+}
+
+function updateCompareButtonState() {
+    if (!compareBtn) return;
+    const checked = Array.from(versionsTableBody.querySelectorAll(".version-select-cb:checked"));
+    
+    // Enforce max 2 checkboxes
+    if (checked.length > 2) {
+        // Uncheck the latest selection
+        this.checked = false;
+        return;
+    }
+    
+    const count = checked.length;
+    compareBtn.disabled = (count !== 2);
+    compareBtn.textContent = `Compare Selected (${count}/2)`;
+}
+
+async function restoreVersion(datasetId, versionNumber) {
+    if (!confirm(`Are you sure you want to restore to version ${versionNumber}?`)) return;
+    setVersionUploadStatus(`Restoring to version ${versionNumber}…`, "info");
+    try {
+        const response = await apiFetch(`/api/data/datasets/${datasetId}/versions/${versionNumber}/restore/`, {
+            method: "POST"
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            setVersionUploadStatus(data.detail || "Restore failed.", "error");
+            return;
+        }
+        setVersionUploadStatus(data.detail || `Restored to version ${versionNumber}.`, "success");
+        await loadDashboard();
+        await loadBlueprint();
+        await loadDatasetLibrary();
+        loadVersionsTable(datasetId);
+    } catch (err) {
+        setVersionUploadStatus(`Restore failed: ${err.message}`, "error");
+    }
+}
+
+// Compare click
+compareBtn?.addEventListener("click", async () => {
+    if (!activeModalDatasetId) return;
+    const checked = Array.from(versionsTableBody.querySelectorAll(".version-select-cb:checked"));
+    if (checked.length !== 2) return;
+    
+    const v1 = checked[0].dataset.ver;
+    const v2 = checked[1].dataset.ver;
+    
+    setVersionUploadStatus("Generating version comparison report…", "info");
+    try {
+        const response = await apiFetch(`/api/data/datasets/${activeModalDatasetId}/versions/compare/?v1=${v1}&v2=${v2}`);
+        const data = await response.json();
+        if (!response.ok) {
+            setVersionUploadStatus(data.detail || "Comparison failed.", "error");
+            return;
+        }
+        setVersionUploadStatus("", "info"); // Clear status
+        displayComparisonReport(data);
+    } catch (err) {
+        setVersionUploadStatus(`Comparison failed: ${err.message}`, "error");
+    }
+});
+
+function displayComparisonReport(data) {
+    if (!compareResultsSection) return;
+    compareResultsSection.hidden = false;
+    
+    if (compareV1Num) compareV1Num.textContent = data.v1_metadata.version_number;
+    if (compareV1Rows) compareV1Rows.textContent = data.v1_metadata.row_count.toLocaleString();
+    if (compareV2Num) compareV2Num.textContent = data.v2_metadata.version_number;
+    if (compareV2Rows) compareV2Rows.textContent = data.v2_metadata.row_count.toLocaleString();
+    
+    if (compareRowDiffVal) {
+        const diff = data.row_count_diff;
+        compareRowDiffVal.textContent = diff >= 0 ? `+${diff.toLocaleString()}` : diff.toLocaleString();
+        if (compareRowDiffContainer) {
+            compareRowDiffContainer.style.background = diff >= 0 ? "rgba(34, 197, 94, 0.08)" : "rgba(239, 68, 68, 0.08)";
+            compareRowDiffContainer.style.color = diff >= 0 ? "#86efac" : "#fca5a5";
+        }
+    }
+    
+    if (compareAddedCount) compareAddedCount.textContent = data.columns_diff.added.length;
+    if (compareAddedCols) {
+        compareAddedCols.innerHTML = data.columns_diff.added.length 
+            ? data.columns_diff.added.map(c => `<span class="schema-diff-tag added">${c}</span>`).join('')
+            : '<span class="schema-diff-tag" style="color: var(--muted);">None</span>';
+    }
+    
+    if (compareRemovedCount) compareRemovedCount.textContent = data.columns_diff.removed.length;
+    if (compareRemovedCols) {
+        compareRemovedCols.innerHTML = data.columns_diff.removed.length 
+            ? data.columns_diff.removed.map(c => `<span class="schema-diff-tag removed">${c}</span>`).join('')
+            : '<span class="schema-diff-tag" style="color: var(--muted);">None</span>';
+    }
+    
+    if (compareStatsBody) {
+        const stats = data.numeric_stats_compare;
+        const columns = Object.keys(stats);
+        
+        if (!columns.length) {
+            compareStatsBody.innerHTML = '<tr><td colspan="6" class="centered">No common numeric columns found for profiling.</td></tr>';
+            return;
+        }
+        
+        compareStatsBody.innerHTML = columns.map(col => {
+            const s = stats[col];
+            const diffClass = s.mean_diff >= 0 ? 'added' : 'removed';
+            const diffSign = s.mean_diff >= 0 ? `+` : '';
+            return `
+                <tr>
+                    <td><strong>${col}</strong></td>
+                    <td>${s.v1_mean.toLocaleString(undefined, {maximumFractionDigits: 2})}</td>
+                    <td>${s.v2_mean.toLocaleString(undefined, {maximumFractionDigits: 2})}</td>
+                    <td class="schema-diff-label ${diffClass}" style="margin-bottom:0;">
+                        ${diffSign}${s.mean_diff.toLocaleString(undefined, {maximumFractionDigits: 2})}
+                    </td>
+                    <td>${s.v1_min.toLocaleString(undefined, {maximumFractionDigits: 2})} - ${s.v1_max.toLocaleString(undefined, {maximumFractionDigits: 2})}</td>
+                    <td>${s.v2_min.toLocaleString(undefined, {maximumFractionDigits: 2})} - ${s.v2_max.toLocaleString(undefined, {maximumFractionDigits: 2})}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+}
+
+closeCompareBtn?.addEventListener("click", () => {
+    if (compareResultsSection) compareResultsSection.hidden = true;
+    versionsTableBody.querySelectorAll(".version-select-cb").forEach(cb => cb.checked = false);
+    updateCompareButtonState();
+});
 
 if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initApp);

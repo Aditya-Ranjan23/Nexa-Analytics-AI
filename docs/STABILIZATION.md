@@ -239,6 +239,134 @@ Phase 1 stabilization is **complete** (Release Candidate).
 
 ---
 
+## Phase 2 — M1.5 Stabilization
+
+### ADR-020: Centralize dataset ownership resolution
+
+**Decision:** Extract `ownership_filter_kwargs(request)` and `user_dataset_queryset(request)` into `request_context.py`. Callers (`views.py`, `upload_service.py`) use these instead of inlining the `is_authenticated` / `session_key` branching.
+
+**Why:** The identical ownership pattern was duplicated in three files. Changes to the session logic required updating all three, a consistency risk.
+
+**Impact:** Net deletion of ~10 lines of duplicated branching. Single point of change for ownership scoping.
+
+---
+
+### ADR-021: Block activation of archived datasets
+
+**Decision:** `dataset_activate` now rejects archived datasets with HTTP 400 before allowing activation.
+
+**Why:** Archived datasets could still be activated, which is semantically inconsistent — archiving is meant to hide a dataset from active use.
+
+**Impact:** One additional guard clause. New test `test_cannot_activate_archived_dataset` covers the boundary.
+
+---
+
+### ADR-022: Fix N+1 query in dataset list serializer
+
+**Decision:** `dataset_list` view pre-resolves `active_upload_id` once from `DashboardState` and passes it to `DatasetUploadSerializer` via context. The serializer reads the cached id instead of calling `resolve_dashboard_state()` per row.
+
+**Why:** For N datasets, the original code issued N identical `get_or_create` queries to `DashboardState`. Now it issues exactly 1.
+
+**Impact:** Dataset list endpoint queries reduced from O(N) to O(1) for state resolution. Serializer retains a fallback path for single-object detail views.
+
+---
+
+## Phase 2 — M1.5 Stabilization
+
+### ADR-020: Centralize dataset ownership resolution
+
+**Decision:** Extract `ownership_filter_kwargs(request)` and `user_dataset_queryset(request)` into `request_context.py`. Callers (`views.py`, `upload_service.py`) use these instead of inlining the `is_authenticated` / `session_key` branching.
+
+**Why:** The identical ownership pattern was duplicated in three files. Changes to the session logic required updating all three, a consistency risk.
+
+**Impact:** Net deletion of ~10 lines of duplicated branching. Single point of change for ownership scoping.
+
+---
+
+### ADR-021: Block activation of archived datasets
+
+**Decision:** `dataset_activate` now rejects archived datasets with HTTP 400 before allowing activation.
+
+**Why:** Archived datasets could still be activated, which is semantically inconsistent — archiving is meant to hide a dataset from active use.
+
+**Impact:** One additional guard clause. New test `test_cannot_activate_archived_dataset` covers the boundary.
+
+---
+
+### ADR-022: Fix N+1 query in dataset list serializer
+
+**Decision:** `dataset_list` view pre-resolves `active_upload_id` once from `DashboardState` and passes it to `DatasetUploadSerializer` via context. The serializer reads the cached id instead of calling `resolve_dashboard_state()` per row.
+
+**Why:** For N datasets, the original code issued N identical `get_or_create` queries to `DashboardState`. Now it issues exactly 1.
+
+**Impact:** Dataset list endpoint queries reduced from O(N) to O(1) for state resolution. Serializer retains a fallback path for single-object detail views.
+
+---
+
+## Phase 2 — M1.5 Stabilization
+
+### ADR-020: Centralize dataset ownership resolution
+
+**Decision:** Extract `ownership_filter_kwargs(request)` and `user_dataset_queryset(request)` into `request_context.py`. Callers (`views.py`, `upload_service.py`) use these instead of inlining the `is_authenticated` / `session_key` branching.
+
+**Why:** The identical ownership pattern was duplicated in three files. Changes to the session logic required updating all three, a consistency risk.
+
+**Impact:** Net deletion of ~10 lines of duplicated branching. Single point of change for ownership scoping.
+
+---
+
+### ADR-021: Block activation of archived datasets
+
+**Decision:** `dataset_activate` now rejects archived datasets with HTTP 400 before allowing activation.
+
+**Why:** Archived datasets could still be activated, which is semantically inconsistent — archiving is meant to hide a dataset from active use.
+
+**Impact:** One additional guard clause. New test `test_cannot_activate_archived_dataset` covers the boundary.
+
+---
+
+### ADR-022: Fix N+1 query in dataset list serializer
+
+**Decision:** `dataset_list` view pre-resolves `active_upload_id` once from `DashboardState` and passes it to `DatasetUploadSerializer` via context. The serializer reads the cached id instead of calling `resolve_dashboard_state()` per row.
+
+**Why:** For N datasets, the original code issued N identical `get_or_create` queries to `DashboardState`. Now it issues exactly 1.
+
+**Impact:** Dataset list endpoint queries reduced from O(N) to O(1) for state resolution. Serializer retains a fallback path for single-object detail views.
+
+---
+
+## Phase 2 — M1.5 Stabilization
+
+### ADR-020: Centralize dataset ownership resolution
+
+**Decision:** Extract `ownership_filter_kwargs(request)` and `user_dataset_queryset(request)` into `request_context.py`. Callers (`views.py`, `upload_service.py`) use these instead of inlining the `is_authenticated` / `session_key` branching.
+
+**Why:** The identical ownership pattern was duplicated in three files. Changes to the session logic required updating all three, a consistency risk.
+
+**Impact:** Net deletion of ~10 lines of duplicated branching. Single point of change for ownership scoping.
+
+---
+
+### ADR-021: Block activation of archived datasets
+
+**Decision:** `dataset_activate` now rejects archived datasets with HTTP 400 before allowing activation.
+
+**Why:** Archived datasets could still be activated, which is semantically inconsistent — archiving is meant to hide a dataset from active use.
+
+**Impact:** One additional guard clause. New test `test_cannot_activate_archived_dataset` covers the boundary.
+
+---
+
+### ADR-022: Fix N+1 query in dataset list serializer
+
+**Decision:** `dataset_list` view pre-resolves `active_upload_id` once from `DashboardState` and passes it to `DatasetUploadSerializer` via context. The serializer reads the cached id instead of calling `resolve_dashboard_state()` per row.
+
+**Why:** For N datasets, the original code issued N identical `get_or_create` queries to `DashboardState`. Now it issues exactly 1.
+
+**Impact:** Dataset list endpoint queries reduced from O(N) to O(1) for state resolution. Serializer retains a fallback path for single-object detail views.
+
+---
+
 ## Verification Commands
 
 ```bash

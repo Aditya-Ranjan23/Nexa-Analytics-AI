@@ -127,6 +127,16 @@
                             </div>
                             <div id="dataStatus" class="status-banner" role="status" hidden></div>
                         </article>
+
+                        <article class="panel library-card" id="libraryCardPanel">
+                            <div class="panel-head">
+                                <h3>Dataset Library</h3>
+                                <button type="button" class="ghost-btn small" id="deactivateDatasetBtn" title="Reset dashboard to the default seed dataset">Reset to Seed</button>
+                            </div>
+                            <div class="library-list" id="libraryList">
+                                <div class="empty-state centered">Loading dataset library...</div>
+                            </div>
+                        </article>
                     </div>
 
                     <article class="panel blueprint-panel">
@@ -201,6 +211,127 @@
             </div>
         </div>
     </main>
+
+    <!-- Version History & Comparison Modal -->
+    <div id="versionsModal" class="modal" hidden>
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h3 id="versionsModalTitle">Dataset Version History</h3>
+                <button type="button" class="close-btn" id="closeVersionsModalBtn" title="Close modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Upload/Ingest Version Section -->
+                <div class="version-upload-section">
+                    <h4>Upload New Version</h4>
+                    <div class="version-upload-forms">
+                        <form id="versionUploadForm" class="version-inline-form">
+                            <input type="file" id="versionFileInput" accept=".csv,.xlsx,.xls" style="display: none;" />
+                            <button type="button" class="ghost-btn" id="versionFileSelectBtn">Choose File</button>
+                            <span id="versionFileName" class="filename-span">No file chosen</span>
+                            <button type="submit" class="primary-btn small">Upload Version</button>
+                        </form>
+                        <div class="version-or">or</div>
+                        <form id="versionUrlForm" class="version-inline-form">
+                            <input type="url" id="versionUrlInput" placeholder="https://example.com/data.csv" required />
+                            <button type="submit" class="primary-btn small">Ingest URL Version</button>
+                        </form>
+                    </div>
+                    <div id="versionUploadStatus" class="status-banner" hidden></div>
+                </div>
+
+                <hr class="modal-divider" />
+
+                <!-- Versions List -->
+                <div class="versions-list-section">
+                    <div class="versions-list-header">
+                        <h4>Stored Versions</h4>
+                        <button type="button" class="primary-btn small" id="compareBtn" disabled>Compare Selected (0/2)</button>
+                    </div>
+                    <div class="table-container">
+                        <table class="versions-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px;">Select</th>
+                                    <th>Ver</th>
+                                    <th>Source File/URL</th>
+                                    <th>Rows</th>
+                                    <th>Uploaded At</th>
+                                    <th>Status</th>
+                                    <th style="text-align: right;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="versionsTableBody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Compare Results Section -->
+                <div id="compareResultsSection" class="compare-results-section" hidden>
+                    <hr class="modal-divider" />
+                    <div class="compare-header">
+                        <h4>Comparison Report</h4>
+                        <button type="button" class="ghost-btn small" id="closeCompareBtn">Clear Comparison</button>
+                    </div>
+                    <div class="compare-grids">
+                        <div class="compare-summary-card">
+                            <h5>Dataset Metadata</h5>
+                            <div class="compare-meta-grid">
+                                <div>
+                                    <span class="compare-meta-label">Version 1 (v<span id="compareV1Num">—</span>)</span>
+                                    <span class="compare-meta-val"><span id="compareV1Rows">—</span> rows</span>
+                                </div>
+                                <div class="compare-vs-arrow">➔</div>
+                                <div>
+                                    <span class="compare-meta-label">Version 2 (v<span id="compareV2Num">—</span>)</span>
+                                    <span class="compare-meta-val"><span id="compareV2Rows">—</span> rows</span>
+                                </div>
+                            </div>
+                            <div class="compare-row-diff" id="compareRowDiffContainer">
+                                Diff: <strong id="compareRowDiffVal">—</strong> rows
+                            </div>
+                        </div>
+
+                        <div class="compare-summary-card">
+                            <h5>Schema Diff</h5>
+                            <div class="schema-diff-container">
+                                <div>
+                                    <span class="schema-diff-label added">Added Columns (<span id="compareAddedCount">0</span>)</span>
+                                    <div class="schema-diff-tags" id="compareAddedCols"></div>
+                                </div>
+                                <div style="margin-top: 1rem;">
+                                    <span class="schema-diff-label removed">Removed Columns (<span id="compareRemovedCount">0</span>)</span>
+                                    <div class="schema-diff-tags" id="compareRemovedCols"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="compare-stats-card" style="margin-top: 1.5rem;">
+                        <h5>Statistical Summary (Common Numeric Columns)</h5>
+                        <div class="table-container">
+                            <table class="compare-stats-table">
+                                <thead>
+                                    <tr>
+                                        <th>Column</th>
+                                        <th>v1 Mean</th>
+                                        <th>v2 Mean</th>
+                                        <th>Mean Diff</th>
+                                        <th>v1 Range (Min - Max)</th>
+                                        <th>v2 Range (Min - Max)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="compareStatsBody">
+                                    <!-- Populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>

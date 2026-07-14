@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### [0.3.0] — 2026-07-14 — Milestone M2: Dataset Versioning & History
+
+### Added
+- **Dataset Versioning & History**:
+  - Introduced `DatasetVersion` model to maintain chronological snapshots of dataset files, row counts, and blueprints.
+  - Active version tracking on parent `DatasetUpload` through `active_version_number`.
+  - Versions listing endpoint (`api/data/datasets/<pk>/versions/`).
+  - Upload version file endpoint (`api/data/datasets/<pk>/versions/upload/`).
+  - Ingest URL version endpoint (`api/data/datasets/<pk>/versions/url/`).
+  - Restore version endpoint (`api/data/datasets/<pk>/versions/<number>/restore/`) which shifts the parent dataset to use a historic snapshot.
+  - Compare versions endpoint (`api/data/datasets/<pk>/versions/compare/?v1=X&v2=Y`) which calculates row diffs, column schema modifications, and statistical profiling comparisons (means, ranges, and diffs) for common numeric columns.
+  - Frontend Version History modal featuring inline file uploads, URL ingestion, restore buttons, and interactive checkbox comparison.
+  - 6 new automated tests verifying the versioning listing, uploading, restoring, and statistical comparison.
+
+### Fixed
+- **Health Check Database Checks**: Restored the database cursors pinging mechanism on `/health/` to guarantee deep readiness checking.
+
+### Changed
+- Bumped health check API version response to `0.3.0`.
+
 ---
 
 ## [0.2.0] — 2026-07-13 — Phase 1.5 Developer Preview

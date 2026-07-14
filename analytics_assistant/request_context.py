@@ -1,6 +1,6 @@
 """Request-scoped helpers: role resolution and dashboard state."""
 
-from analytics_assistant.models import ChatSession, DashboardState
+from analytics_assistant.models import ChatSession, DashboardState, DatasetUpload
 from analytics_assistant.roles import normalize_role
 
 
@@ -28,6 +28,25 @@ def resolve_dashboard_state(request) -> DashboardState:
     return state
 
 
+def ownership_filter_kwargs(request) -> dict:
+    """Return ORM filter kwargs that scope any model with owner/session_key
+    to the requesting user or anonymous session.
+
+    Single source of truth for the ownership branching pattern used by
+    DatasetUpload queries, upload persistence, etc.
+    """
+    if request.user.is_authenticated:
+        return {"owner": request.user}
+    if not request.session.session_key:
+        request.session.save()
+    return {"session_key": request.session.session_key}
+
+
+def user_dataset_queryset(request):
+    """Return a DatasetUpload queryset scoped to the requesting user/session."""
+    return DatasetUpload.objects.filter(**ownership_filter_kwargs(request))
+
+
 def session_belongs_to_request(session: ChatSession, request) -> bool:
     if request.user.is_authenticated:
         return session.user_id == request.user.id
@@ -36,4 +55,3 @@ def session_belongs_to_request(session: ChatSession, request) -> bool:
     raw_session = getattr(request, "session", None)
     request_session_key = (raw_session.session_key if raw_session else None) or ""
     return session.user_id is None and session.session_key == request_session_key
-

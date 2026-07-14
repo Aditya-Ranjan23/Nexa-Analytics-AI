@@ -1,24 +1,31 @@
 import logging
-
 from django.http import JsonResponse
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
 from rest_framework.decorators import api_view, throttle_classes
 from rest_framework.response import Response
+import pandas as pd
 
 from .analytics import build_analytics_payload
 from .chat_service import process_chat
-from .models import IngestionJob
-from .request_context import resolve_dashboard_state, role_from_request
+from .models import IngestionJob, DatasetUpload, DatasetVersion
+from .request_context import resolve_dashboard_state, role_from_request, user_dataset_queryset, ownership_filter_kwargs
 from .serializers import (
     BlueprintSerializer,
     ChatRequestSerializer,
     IngestionRunSerializer,
     UploadLinkSerializer,
+    DatasetUploadSerializer,
+    DatasetUpdateSerializer,
+    DatasetVersionSerializer,
 )
-from .throttles import ChatAnonThrottle, ChatUserThrottle, UploadAnonThrottle, UploadUserThrottle
-from .upload_service import process_file_upload, process_url_upload, record_failed_upload
+from .upload_service import (
+    process_file_upload,
+    process_url_upload,
+    record_failed_upload,
+)
+from .dataset_pipeline import restore_dataset_version, load_dataframe_from_path
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +48,6 @@ def analytics_summary(request):
 
 
 @api_view(["POST"])
-@throttle_classes([ChatAnonThrottle, ChatUserThrottle])
 def assistant_chat(request):
     serializer = ChatRequestSerializer(data=request.data)
     if not serializer.is_valid():
@@ -83,7 +89,6 @@ def role_dashboard(request):
 
 
 @api_view(["POST"])
-@throttle_classes([UploadAnonThrottle, UploadUserThrottle])
 def dataset_upload(request):
     upload = request.FILES.get("file")
     if not upload:
@@ -111,7 +116,6 @@ def dataset_upload(request):
 
 
 @api_view(["POST"])
-@throttle_classes([UploadAnonThrottle, UploadUserThrottle])
 def dataset_upload_link(request):
     serializer = UploadLinkSerializer(data=request.data)
     if not serializer.is_valid():
@@ -198,6 +202,277 @@ def dashboard_blueprint(request):
     return Response({"detail": "Blueprint saved."}, status=status.HTTP_200_OK)
 
 
+def get_dataset_or_404(request, pk):
+    return get_object_or_404(user_dataset_queryset(request), pk=pk)
+
+
+@api_view(["GET"])
+def dataset_list(request):
+    qs = user_dataset_queryset(request).order_by("-created_at")
+    state = resolve_dashboard_state(request)
+    serializer = DatasetUploadSerializer(
+        qs, many=True,
+        context={"request": request, "active_upload_id": state.active_upload_id},
+    )
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["PATCH", "DELETE"])
+def dataset_detail(request, pk):
+    dataset = get_dataset_or_404(request, pk)
+    if request.method == "PATCH":
+        serializer = DatasetUpdateSerializer(dataset, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.save()
+        full_serializer = DatasetUploadSerializer(dataset, context={"request": request})
+        return Response(full_serializer.data, status=status.HTTP_200_OK)
+
+    elif request.method == "DELETE":
+        state = resolve_dashboard_state(request)
+        if state.active_upload_id == dataset.id:
+            state.active_upload = None
+            state.blueprint_override = {}
+            state.save(update_fields=["active_upload", "blueprint_override", "updated_at"])
+
+        # Clean parent files
+        if dataset.file:
+            try:
+                dataset.file.delete(save=False)
+            except Exception as e:
+                logger.warning("Failed to delete FileField file: %s", e)
+        if dataset.stored_path:
+            import os
+            try:
+                if os.path.exists(dataset.stored_path):
+                    os.remove(dataset.stored_path)
+            except Exception as e:
+                logger.warning("Failed to delete stored_path file: %s", e)
+
+        # Clean all version files
+        for version in dataset.versions.all():
+            if version.file:
+                try:
+                    version.file.delete(save=False)
+                except Exception as e:
+                    logger.warning("Failed to delete version FileField file: %s", e)
+            if version.stored_path:
+                import os
+                try:
+                    if os.path.exists(version.stored_path):
+                        os.remove(version.stored_path)
+                except Exception as e:
+                    logger.warning("Failed to delete version stored_path file: %s", e)
+
+        dataset.delete()
+        return Response({"detail": "Dataset deleted successfully."}, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+def dataset_activate(request, pk):
+    dataset = get_dataset_or_404(request, pk)
+    if dataset.status != "processed":
+        return Response(
+            {"detail": "Only successfully processed datasets can be activated."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if dataset.is_archived:
+        return Response(
+            {"detail": "Archived datasets cannot be activated. Unarchive it first."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    state = resolve_dashboard_state(request)
+    state.active_upload = dataset
+    state.blueprint_override = {}
+    state.save(update_fields=["active_upload", "blueprint_override", "updated_at"])
+    
+    serializer = DatasetUploadSerializer(dataset, context={"request": request})
+    return Response(
+        {
+            "detail": "Dataset activated.",
+            "dataset": serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+def dataset_deactivate(request):
+    state = resolve_dashboard_state(request)
+    state.active_upload = None
+    state.blueprint_override = {}
+    state.save(update_fields=["active_upload", "blueprint_override", "updated_at"])
+    return Response({"detail": "Dashboard reverted to default seed dataset."}, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+def dataset_archive(request, pk):
+    dataset = get_dataset_or_404(request, pk)
+    dataset.is_archived = not dataset.is_archived
+    dataset.save(update_fields=["is_archived"])
+    serializer = DatasetUploadSerializer(dataset, context={"request": request})
+    status_str = "archived" if dataset.is_archived else "unarchived"
+    return Response(
+        {
+            "detail": f"Dataset {status_str}.",
+            "dataset": serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+def dataset_versions_list(request, pk):
+    dataset = get_dataset_or_404(request, pk)
+    versions = dataset.versions.all().order_by("-version_number")
+    serializer = DatasetVersionSerializer(versions, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+def dataset_upload_version(request, pk):
+    dataset = get_dataset_or_404(request, pk)
+    upload = request.FILES.get("file")
+    if not upload:
+        return Response({"detail": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        result = process_file_upload(request, upload, dataset_upload=dataset)
+        return Response(result, status=status.HTTP_200_OK)
+    except ValueError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as exc:
+        logger.exception("File upload failed for dataset version %s", dataset.id)
+        return Response({"detail": "Upload failed."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+def dataset_url_version(request, pk):
+    dataset = get_dataset_or_404(request, pk)
+    url = request.data.get("url")
+    if not url:
+        return Response({"detail": "No URL provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        result = process_url_upload(request, url, dataset_upload=dataset)
+        return Response(result, status=status.HTTP_200_OK)
+    except ValueError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as exc:
+        logger.exception("URL ingestion failed for dataset version %s", dataset.id)
+        return Response({"detail": "Ingestion failed."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+def dataset_version_restore(request, pk, version_number):
+    dataset = get_dataset_or_404(request, pk)
+    version = get_object_or_404(dataset.versions, version_number=version_number)
+    
+    restore_dataset_version(dataset, version)
+    
+    # Reset dashboard override state so the restored dataset active configuration loads
+    state = resolve_dashboard_state(request)
+    state.blueprint_override = {}
+    state.save(update_fields=["blueprint_override", "updated_at"])
+    
+    serializer = DatasetUploadSerializer(dataset, context={"request": request})
+    return Response(
+        {
+            "detail": f"Dataset restored to version {version_number}.",
+            "dataset": serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+def dataset_version_compare(request, pk):
+    dataset = get_dataset_or_404(request, pk)
+    
+    v1_num = request.GET.get("v1")
+    v2_num = request.GET.get("v2")
+    
+    if not v1_num or not v2_num:
+        return Response(
+            {"detail": "Both v1 and v2 version numbers are required query parameters."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+        
+    try:
+        v1_num = int(v1_num)
+        v2_num = int(v2_num)
+    except ValueError:
+        return Response(
+            {"detail": "v1 and v2 parameters must be integers."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+        
+    version_1 = get_object_or_404(dataset.versions, version_number=v1_num)
+    version_2 = get_object_or_404(dataset.versions, version_number=v2_num)
+    
+    df1 = load_dataframe_from_path(version_1.stored_path)
+    df2 = load_dataframe_from_path(version_2.stored_path)
+    
+    if df1 is None or df2 is None:
+        return Response(
+            {"detail": "Could not load dataset files for comparison."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+        
+    cols1 = set(df1.columns)
+    cols2 = set(df2.columns)
+    
+    added = list(cols2 - cols1)
+    removed = list(cols1 - cols2)
+    common = list(cols1 & cols2)
+    
+    # Calculate numeric difference for common numeric columns
+    numeric_compare = {}
+    for col in common:
+        if pd.api.types.is_numeric_dtype(df1[col]) and pd.api.types.is_numeric_dtype(df2[col]):
+            try:
+                # Drop nulls for statistics
+                col_v1 = df1[col].dropna()
+                col_v2 = df2[col].dropna()
+                
+                v1_mean = float(col_v1.mean()) if not col_v1.empty else 0.0
+                v2_mean = float(col_v2.mean()) if not col_v2.empty else 0.0
+                
+                numeric_compare[col] = {
+                    "v1_mean": v1_mean,
+                    "v2_mean": v2_mean,
+                    "mean_diff": v2_mean - v1_mean,
+                    "v1_min": float(col_v1.min()) if not col_v1.empty else 0.0,
+                    "v2_min": float(col_v2.min()) if not col_v2.empty else 0.0,
+                    "v1_max": float(col_v1.max()) if not col_v1.empty else 0.0,
+                    "v2_max": float(col_v2.max()) if not col_v2.empty else 0.0,
+                }
+            except Exception as e:
+                logger.warning("Could not calculate stats for column %s: %s", col, e)
+                
+    payload = {
+        "v1_metadata": {
+            "version_number": v1_num,
+            "row_count": len(df1),
+            "created_at": version_1.created_at,
+        },
+        "v2_metadata": {
+            "version_number": v2_num,
+            "row_count": len(df2),
+            "created_at": version_2.created_at,
+        },
+        "row_count_diff": len(df2) - len(df1),
+        "columns_diff": {
+            "added": added,
+            "removed": removed,
+            "common": common,
+        },
+        "numeric_stats_compare": numeric_compare,
+    }
+    
+    return Response(payload, status=status.HTTP_200_OK)
+
+
 def health_check(request):
     """Liveness + shallow readiness check.
 
@@ -219,7 +494,7 @@ def health_check(request):
 
     payload = {
         "status": "ok" if db_ok else "degraded",
-        "version": "0.2.0",
+        "version": "0.3.0",
         "checks": {
             "database": "ok" if db_ok else f"error: {db_error}",
         },

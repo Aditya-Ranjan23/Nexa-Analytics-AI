@@ -108,7 +108,7 @@ Phase 1 focused on **stabilization**: no new product features; hardening archite
 
 | Module | Responsibility |
 |--------|----------------|
-| `models.py` | ChatSession, ChatMessage, DatasetUpload, DashboardState, IngestionJob |
+| `models.py` | ChatSession, ChatMessage, DatasetUpload, DatasetVersion, DashboardState, IngestionJob |
 | `roles.py` | Role normalization, widget definitions, KPI filtering |
 | `admin.py` | Django admin for all models |
 
@@ -140,6 +140,17 @@ resolve_active_upload(dataset_upload)
 **Blueprint resolution** uses the same upload record via `active_blueprint()`.
 
 **Upload writes** go only to `media/datasets/` via `DatasetUpload.stored_path`. The seed CSV is **never modified** on upload (Phase 1 change — eliminates dual-path drift).
+
+---
+
+## 4.1 Dataset Versioning & History
+
+Chronological version control is built directly on the multi-dataset foundation:
+
+- **Database Snapshotting**: The `DatasetVersion` model captures complete file metadata, row counts, and blueprints. Each version belongs to a parent `DatasetUpload` through a ForeignKey, indexed by `version_number`.
+- **Upload Incrementation**: When a new version file or URL is submitted for an existing dataset, the parent record is updated with the new row count, path, and blueprint, and `active_version_number` is bumped. A new `DatasetVersion` record is saved.
+- **Comparison Engine**: Version comparison evaluates structural schemas (added/removed columns) and statistical profiles (mean, min, max, diffs) for common numeric columns.
+- **Rollback System**: Restoring a version overwrites the parent `DatasetUpload` path, file, row count, and active blueprint to match the target `DatasetVersion` record, updating the dashboard state instantly.
 
 ---
 
@@ -180,13 +191,14 @@ User (Django auth, optional)
         ├── active_upload → DatasetUpload
         └── blueprint_override (JSON)
 
-DatasetUpload (source_type, stored_path, ai_blueprint, status)
+DatasetUpload (owner, session_key, name, description, source_type, file, source_url, stored_path, row_count, ai_blueprint, status, error_message, is_archived)
 IngestionJob (source, status, details)
 ```
 
-**State persistence:**
-- Authenticated users: `DashboardState` keyed by `user`
-- Anonymous visitors: `DashboardState` keyed by Django `session_key`
+**State & Ownership persistence:**
+- Authenticated users: `DashboardState` and `DatasetUpload` keyed by `user` / `owner`
+- Anonymous visitors: `DashboardState` and `DatasetUpload` keyed by Django `session_key`
+- Resolved uploads: `resolve_active_upload` ensures active custom uploads are fully scoped to the requesting user/session, falling back safely to the global read-only seed dataset.
 
 ---
 

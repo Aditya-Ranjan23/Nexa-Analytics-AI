@@ -16,7 +16,7 @@ from analytics_assistant.dataset_pipeline import (
     resolve_active_upload,
 )
 from analytics_assistant.dataset_profile import profile_for_blueprint
-from analytics_assistant.models import ChatSession, DatasetUpload
+from analytics_assistant.models import ChatSession, DatasetUpload, DatasetVersion
 from analytics_assistant.request_context import session_belongs_to_request
 from analytics_assistant.roles import (
     filter_kpi_cards_for_role,
@@ -458,7 +458,7 @@ class HealthCheckTests(TestCase):
         response = self.client.get("/health/")
         data = response.json()
         self.assertIn("version", data)
-        self.assertEqual(data["version"], "0.2.0")
+        self.assertEqual(data["version"], "0.3.0")
 
     def test_health_check_includes_database_check(self):
         response = self.client.get("/health/")
@@ -525,3 +525,300 @@ class UploadApiTests(TestCase):
         if response.status_code == 400:
             self.assertIn("detail", response.json())
 
+
+class DatasetManagementTests(TestCase):
+    def setUp(self):
+        self.client = APIClient(enforce_csrf_checks=False)
+        self.user_a = User.objects.create_user(username="usera", password="password")
+        self.user_b = User.objects.create_user(username="userb", password="password")
+        
+        # Datasets for User A
+        self.dataset_a = DatasetUpload.objects.create(
+            owner=self.user_a,
+            name="dataset_a.csv",
+            source_type="file",
+            stored_path="datasets/dataset_a.csv",
+            row_count=10,
+            status="processed",
+        )
+        # Datasets for User B
+        self.dataset_b = DatasetUpload.objects.create(
+            owner=self.user_b,
+            name="dataset_b.csv",
+            source_type="file",
+            stored_path="datasets/dataset_b.csv",
+            row_count=20,
+            status="processed",
+        )
+
+    def test_list_datasets_authenticated_user_a(self):
+        self.client.force_authenticate(user=self.user_a)
+        response = self.client.get("/api/data/datasets/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["id"], self.dataset_a.id)
+
+    def test_list_datasets_authenticated_user_b(self):
+        self.client.force_authenticate(user=self.user_b)
+        response = self.client.get("/api/data/datasets/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["id"], self.dataset_b.id)
+
+    def test_list_datasets_anonymous_session_isolation(self):
+        # First session
+        session_a = self.client.session
+        session_a["foo"] = "bar"
+        session_a.save()
+        key_a = session_a.session_key
+
+        ds_anon_a = DatasetUpload.objects.create(
+            session_key=key_a,
+            name="anon_a.csv",
+            source_type="file",
+            stored_path="datasets/anon_a.csv",
+            row_count=5,
+            status="processed",
+        )
+
+        response = self.client.get("/api/data/datasets/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()), 1)
+        self.assertEqual(response.json()[0]["id"], ds_anon_a.id)
+
+        # Switch to second session
+        self.client.logout()
+        session_b = self.client.session
+        session_b["foo"] = "baz"
+        session_b.save()
+        key_b = session_b.session_key
+
+        response = self.client.get("/api/data/datasets/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()), 0)  # Empty for session B
+
+    def test_cannot_activate_foreign_dataset(self):
+        self.client.force_authenticate(user=self.user_a)
+        # Attempt to activate B's dataset
+        response = self.client.post(f"/api/data/datasets/{self.dataset_b.id}/activate/")
+        self.assertEqual(response.status_code, 404)
+
+    def test_cannot_rename_foreign_dataset(self):
+        self.client.force_authenticate(user=self.user_a)
+        response = self.client.patch(
+            f"/api/data/datasets/{self.dataset_b.id}/",
+            {"name": "hacked.csv"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_cannot_archive_foreign_dataset(self):
+        self.client.force_authenticate(user=self.user_a)
+        response = self.client.post(f"/api/data/datasets/{self.dataset_b.id}/archive/")
+        self.assertEqual(response.status_code, 404)
+
+    def test_cannot_delete_foreign_dataset(self):
+        self.client.force_authenticate(user=self.user_a)
+        response = self.client.delete(f"/api/data/datasets/{self.dataset_b.id}/")
+        self.assertEqual(response.status_code, 404)
+
+    def test_activate_dataset_success(self):
+        self.client.force_authenticate(user=self.user_a)
+        response = self.client.post(f"/api/data/datasets/{self.dataset_a.id}/activate/")
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify state is updated
+        from analytics_assistant.request_context import resolve_dashboard_state
+        request = type("R", (), {"user": self.user_a})()
+        state = resolve_dashboard_state(request)
+        self.assertEqual(state.active_upload, self.dataset_a)
+
+    def test_deactivate_dataset_reverts_to_seed(self):
+        self.client.force_authenticate(user=self.user_a)
+        # First activate
+        self.client.post(f"/api/data/datasets/{self.dataset_a.id}/activate/")
+        # Now deactivate
+        response = self.client.post("/api/data/datasets/deactivate/")
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify active dataset is None
+        request = type("R", (), {"user": self.user_a})()
+        from analytics_assistant.request_context import resolve_dashboard_state
+        state = resolve_dashboard_state(request)
+        self.assertIsNone(state.active_upload)
+
+    def test_rename_dataset_success(self):
+        self.client.force_authenticate(user=self.user_a)
+        response = self.client.patch(
+            f"/api/data/datasets/{self.dataset_a.id}/",
+            {"name": "new_name.csv", "description": "some description"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.dataset_a.refresh_from_db()
+        self.assertEqual(self.dataset_a.name, "new_name.csv")
+        self.assertEqual(self.dataset_a.description, "some description")
+
+    def test_archive_dataset_success(self):
+        self.client.force_authenticate(user=self.user_a)
+        self.assertFalse(self.dataset_a.is_archived)
+        response = self.client.post(f"/api/data/datasets/{self.dataset_a.id}/archive/")
+        self.assertEqual(response.status_code, 200)
+        self.dataset_a.refresh_from_db()
+        self.assertTrue(self.dataset_a.is_archived)
+
+    def test_delete_dataset_success(self):
+        self.client.force_authenticate(user=self.user_a)
+        # Activate it first
+        self.client.post(f"/api/data/datasets/{self.dataset_a.id}/activate/")
+        
+        # Make a mock stored file path
+        import tempfile
+        import os
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(b"data")
+            temp_path = f.name
+            
+        self.dataset_a.stored_path = temp_path
+        self.dataset_a.save()
+        
+        # Delete
+        response = self.client.delete(f"/api/data/datasets/{self.dataset_a.id}/")
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify db record deleted
+        self.assertFalse(DatasetUpload.objects.filter(pk=self.dataset_a.id).exists())
+        
+        # Verify file deleted
+        self.assertFalse(os.path.exists(temp_path))
+        
+        # Verify active dataset is reset to None
+        request = type("R", (), {"user": self.user_a})()
+        from analytics_assistant.request_context import resolve_dashboard_state
+        state = resolve_dashboard_state(request)
+        self.assertIsNone(state.active_upload)
+
+    def test_cannot_activate_archived_dataset(self):
+        self.client.force_authenticate(user=self.user_a)
+        self.dataset_a.is_archived = True
+        self.dataset_a.save(update_fields=["is_archived"])
+        response = self.client.post(f"/api/data/datasets/{self.dataset_a.id}/activate/")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Archived", response.json()["detail"])
+
+    def test_list_versions(self):
+        self.client.force_authenticate(user=self.user_a)
+        version = DatasetVersion.objects.create(
+            dataset=self.dataset_a,
+            version_number=1,
+            name="v1.csv",
+            source_type="file",
+            row_count=10,
+        )
+        response = self.client.get(f"/api/data/datasets/{self.dataset_a.id}/versions/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["version_number"], 1)
+
+    def test_cannot_list_foreign_versions(self):
+        self.client.force_authenticate(user=self.user_a)
+        response = self.client.get(f"/api/data/datasets/{self.dataset_b.id}/versions/")
+        self.assertEqual(response.status_code, 404)
+
+    def test_upload_new_version_success(self):
+        self.client.force_authenticate(user=self.user_a)
+        import io
+        csv_content = b"date,revenue,orders\n2024-01-01,1000,10\n2024-01-02,1500,15\n"
+        fake_file = io.BytesIO(csv_content)
+        fake_file.name = "v2.csv"
+        fake_file.size = len(csv_content)
+
+        # Ensure initial version exists so version number bumps correctly
+        DatasetVersion.objects.create(
+            dataset=self.dataset_a,
+            version_number=1,
+            name=self.dataset_a.name,
+            source_type=self.dataset_a.source_type,
+            row_count=self.dataset_a.row_count,
+        )
+
+        response = self.client.post(
+            f"/api/data/datasets/{self.dataset_a.id}/versions/upload/",
+            {"file": fake_file},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.dataset_a.refresh_from_db()
+        self.assertEqual(self.dataset_a.active_version_number, 2)
+        self.assertEqual(self.dataset_a.versions.count(), 2)
+
+    def test_restore_version(self):
+        self.client.force_authenticate(user=self.user_a)
+        v1 = DatasetVersion.objects.create(
+            dataset=self.dataset_a,
+            version_number=1,
+            name="v1.csv",
+            source_type="file",
+            row_count=10,
+            stored_path="datasets/v1.csv",
+        )
+        v2 = DatasetVersion.objects.create(
+            dataset=self.dataset_a,
+            version_number=2,
+            name="v2.csv",
+            source_type="file",
+            row_count=20,
+            stored_path="datasets/v2.csv",
+        )
+        response = self.client.post(f"/api/data/datasets/{self.dataset_a.id}/versions/1/restore/")
+        self.assertEqual(response.status_code, 200)
+        self.dataset_a.refresh_from_db()
+        self.assertEqual(self.dataset_a.active_version_number, 1)
+        self.assertEqual(self.dataset_a.row_count, 10)
+
+    def test_compare_versions(self):
+        self.client.force_authenticate(user=self.user_a)
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="w") as f1:
+            f1.write("date,revenue,orders\n2024-01-01,1000,10\n2024-01-02,1100,12\n")
+            path1 = f1.name
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="w") as f2:
+            f2.write("date,revenue,orders,extra\n2024-01-01,1200,15,abc\n2024-01-02,1400,20,xyz\n")
+            path2 = f2.name
+
+        try:
+            v1 = DatasetVersion.objects.create(
+                dataset=self.dataset_a,
+                version_number=1,
+                name="v1.csv",
+                source_type="file",
+                row_count=2,
+                stored_path=path1,
+            )
+            v2 = DatasetVersion.objects.create(
+                dataset=self.dataset_a,
+                version_number=2,
+                name="v2.csv",
+                source_type="file",
+                row_count=2,
+                stored_path=path2,
+            )
+            
+            response = self.client.get(
+                f"/api/data/datasets/{self.dataset_a.id}/versions/compare/?v1=1&v2=2"
+            )
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertEqual(data["row_count_diff"], 0)
+            self.assertIn("extra", data["columns_diff"]["added"])
+            self.assertEqual(data["numeric_stats_compare"]["revenue"]["mean_diff"], 250.0)
+        finally:
+            import os
+            try:
+                os.remove(path1)
+                os.remove(path2)
+            except Exception:
+                pass

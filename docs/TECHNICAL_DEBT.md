@@ -148,10 +148,10 @@ Severity scale: **Critical** · **High** · **Medium** · **Low**
 |-------|-------|
 | **Severity** | Medium |
 | **Area** | Architecture |
-| **Description** | Single global dataset namespace. `DashboardState` per user/session only. No org isolation. |
+| **Description** | Single global organization scope. User/session-level dataset ownership scoping implemented in Phase 2 M1. Organization isolation remains pending. |
 | **Risk** | Blocks enterprise multi-customer deployment |
-| **Proposed resolution** | Introduce `Organization` model; scope uploads, state, chat, blueprints per org. |
-| **Phase** | Phase 2 M1 (foundational) |
+| **Proposed resolution** | Scope uploads, state, chat, blueprints per organization model (Phase 2 Organization milestones). |
+| **Phase** | Phase 2 M3/M4 |
 | **Effort** | Large |
 
 ---

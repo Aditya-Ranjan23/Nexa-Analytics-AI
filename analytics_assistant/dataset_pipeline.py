@@ -7,7 +7,7 @@ import pandas as pd
 from django.conf import settings
 
 from .data_loaders import load_tabular_from_path
-from .models import DatasetUpload
+from .models import DatasetUpload, DatasetVersion
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ DEFAULT_SEED_PATH = Path(settings.BASE_DIR) / "data" / "sales_data.csv"
 def resolve_active_upload(dataset_upload: DatasetUpload | None = None) -> DatasetUpload | None:
     if dataset_upload and dataset_upload.stored_path:
         return dataset_upload
-    return DatasetUpload.objects.filter(status="processed").order_by("-created_at").first()
+    return None
 
 
 def active_blueprint(
@@ -69,3 +69,15 @@ def load_active_dataframe(dataset_upload: DatasetUpload | None = None) -> pd.Dat
         return get_data_source().load()
 
     return load_seed_dataset()
+
+
+def restore_dataset_version(dataset: DatasetUpload, version: DatasetVersion) -> None:
+    """Overwrite the parent DatasetUpload file and metadata with version content."""
+    dataset.file = version.file
+    dataset.source_url = version.source_url
+    dataset.stored_path = version.stored_path
+    dataset.row_count = version.row_count
+    dataset.ai_blueprint = version.ai_blueprint
+    dataset.active_version_number = version.version_number
+    dataset.status = "processed"
+    dataset.save()
