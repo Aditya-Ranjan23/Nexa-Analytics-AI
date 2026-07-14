@@ -163,14 +163,20 @@ class ChatSessionScopeTests(TestCase):
         self.user = User.objects.create_user(username="alice", password="secret")
         self.other = User.objects.create_user(username="bob", password="secret")
 
+        from analytics_assistant.request_context import resolve_active_workspace
+        req_user = type("Req", (), {"user": self.user})()
+        req_other = type("Req", (), {"user": self.other})()
+        self.ws_user = resolve_active_workspace(req_user)
+        self.ws_other = resolve_active_workspace(req_other)
+
     def test_authenticated_user_cannot_access_foreign_session(self):
-        session = ChatSession.objects.create(user=self.other, role="ceo", title="Private")
+        session = ChatSession.objects.create(user=self.other, workspace=self.ws_other, role="ceo", title="Private")
         request = self.factory.get("/")
         request.user = self.user
         self.assertFalse(session_belongs_to_request(session, request))
 
     def test_anonymous_user_cannot_access_authenticated_session(self):
-        session = ChatSession.objects.create(user=self.user, role="ceo", title="Private")
+        session = ChatSession.objects.create(user=self.user, workspace=self.ws_user, role="ceo", title="Private")
         request = self.factory.get("/")
         request.user = AnonymousUser()
         self.assertFalse(session_belongs_to_request(session, request))
@@ -506,8 +512,15 @@ class DatasetManagementTests(TestCase):
         self.user_a = User.objects.create_user(username="usera", password="password")
         self.user_b = User.objects.create_user(username="userb", password="password")
         
+        from analytics_assistant.request_context import resolve_active_workspace
+        req_a = type("Req", (), {"user": self.user_a})()
+        req_b = type("Req", (), {"user": self.user_b})()
+        self.ws_a = resolve_active_workspace(req_a)
+        self.ws_b = resolve_active_workspace(req_b)
+
         # Datasets for User A
         self.dataset_a = DatasetUpload.objects.create(
+            workspace=self.ws_a,
             owner=self.user_a,
             name="dataset_a.csv",
             source_type="file",
@@ -517,6 +530,7 @@ class DatasetManagementTests(TestCase):
         )
         # Datasets for User B
         self.dataset_b = DatasetUpload.objects.create(
+            workspace=self.ws_b,
             owner=self.user_b,
             name="dataset_b.csv",
             source_type="file",
@@ -796,3 +810,72 @@ class DatasetManagementTests(TestCase):
                 os.remove(path2)
             except Exception:
                 pass
+
+
+class WorkspaceTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        self.user_a = User.objects.create_user(username="usera", password="password")
+        self.user_b = User.objects.create_user(username="userb", password="password")
+        
+        # Resolve active workspaces to trigger auto-creation
+        from analytics_assistant.request_context import resolve_active_workspace
+        request_a = type("Req", (), {"user": self.user_a})()
+        request_b = type("Req", (), {"user": self.user_b})()
+        
+        self.ws_a = resolve_active_workspace(request_a)
+        self.ws_b = resolve_active_workspace(request_b)
+
+    def test_default_workspace_created(self):
+        self.assertIsNotNone(self.ws_a)
+        self.assertEqual(self.ws_a.owner, self.user_a)
+        self.assertEqual(self.ws_a.name, "usera's Workspace")
+
+    def test_dataset_scoping_to_workspace(self):
+        # Create dataset in workspace A
+        ds_a = DatasetUpload.objects.create(
+            workspace=self.ws_a,
+            owner=self.user_a,
+            source_type="file",
+            name="dataset_a.csv",
+        )
+        # Create dataset in workspace B
+        ds_b = DatasetUpload.objects.create(
+            workspace=self.ws_b,
+            owner=self.user_b,
+            source_type="file",
+            name="dataset_b.csv",
+        )
+
+        from analytics_assistant.request_context import user_dataset_queryset
+        
+        # Check queryset for user A
+        request_a = type("Req", (), {"user": self.user_a})()
+        qs_a = user_dataset_queryset(request_a)
+        self.assertIn(ds_a, qs_a)
+        self.assertNotIn(ds_b, qs_a)
+
+        # Check queryset for user B
+        request_b = type("Req", (), {"user": self.user_b})()
+        qs_b = user_dataset_queryset(request_b)
+        self.assertIn(ds_b, qs_b)
+        self.assertNotIn(ds_a, qs_b)
+
+    def test_anonymous_session_isolation(self):
+        from django.contrib.auth.models import AnonymousUser
+        class DummySession:
+            def __init__(self):
+                self.session_key = "anon_key_1"
+            def save(self):
+                pass
+        request = type("Req", (), {
+            "user": AnonymousUser(),
+            "session": DummySession()
+        })()
+        
+        from analytics_assistant.request_context import resolve_dashboard_state
+        state = resolve_dashboard_state(request)
+        self.assertIsNone(state.workspace)
+        self.assertEqual(state.session_key, "anon_key_1")
+

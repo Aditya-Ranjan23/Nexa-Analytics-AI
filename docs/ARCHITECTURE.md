@@ -108,7 +108,7 @@ Phase 1 focused on **stabilization**: no new product features; hardening archite
 
 | Module | Responsibility |
 |--------|----------------|
-| `models.py` | ChatSession, ChatMessage, DatasetUpload, DatasetVersion, DashboardState, IngestionJob |
+| `models.py` | Workspace, ChatSession, ChatMessage, DatasetUpload, DatasetVersion, DashboardState, IngestionJob |
 | `admin.py` | Django admin for all models |
 
 ### 3.6 Frontend
@@ -150,6 +150,16 @@ Chronological version control is built directly on the multi-dataset foundation:
 - **Upload Incrementation**: When a new version file or URL is submitted for an existing dataset, the parent record is updated with the new row count, path, and blueprint, and `active_version_number` is bumped. A new `DatasetVersion` record is saved.
 - **Comparison Engine**: Version comparison evaluates structural schemas (added/removed columns) and statistical profiles (mean, min, max, diffs) for common numeric columns.
 - **Rollback System**: Restoring a version overwrites the parent `DatasetUpload` path, file, row count, and active blueprint to match the target `DatasetVersion` record, updating the dashboard state instantly.
+
+---
+
+## 4.2 Workspace Foundation (ADR-024)
+
+Every user starts with exactly one workspace, acting as the root-level container for all assets:
+
+- **Isolated Scoping**: All `DatasetUpload`, `DashboardState`, and `ChatSession` instances belong to a `Workspace` ForeignKey. Scoping is enforced at request context level via `resolve_active_workspace()` and `ownership_filter_kwargs()`.
+- **Backward-Compatible Migration**: All existing user data is backfilled into auto-generated default user workspaces.
+- **Anonymous Session Behavior**: Anonymous users continue using browser session keys without being tied to workspaces.
 
 ---
 

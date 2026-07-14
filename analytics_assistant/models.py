@@ -54,6 +54,24 @@ class OrganizationMember(models.Model):
         return f"{self.user} @ {self.organization} ({self.role})"
 
 
+class Workspace(models.Model):
+    """Primary container of work for authenticated users."""
+
+    name = models.CharField(max_length=150)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="workspaces",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.name} ({self.owner.username})"
+
+
 class ChatSession(models.Model):
     ROLE_CHOICES = (
         ("ceo", "CEO"),
@@ -63,6 +81,13 @@ class ChatSession(models.Model):
 
     organization = models.ForeignKey(
         Organization,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="chat_sessions",
+    )
+    workspace = models.ForeignKey(
+        Workspace,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -108,6 +133,13 @@ class DatasetUpload(models.Model):
 
     organization = models.ForeignKey(
         Organization,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="datasets",
+    )
+    workspace = models.ForeignKey(
+        Workspace,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -188,6 +220,13 @@ class IngestionJob(models.Model):
 class DashboardState(models.Model):
     organization = models.ForeignKey(
         Organization,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dashboard_states",
+    )
+    workspace = models.ForeignKey(
+        Workspace,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

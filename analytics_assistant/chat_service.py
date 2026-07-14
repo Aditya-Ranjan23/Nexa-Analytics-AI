@@ -6,7 +6,7 @@ from django.conf import settings
 
 from .analytics import build_analytics_payload
 from .models import ChatMessage, ChatSession
-from .request_context import session_belongs_to_request
+from .request_context import session_belongs_to_request, resolve_active_workspace
 from .services import ask_nvidia_assistant
 
 logger = logging.getLogger(__name__)
@@ -32,9 +32,11 @@ def resolve_chat_session(request, session_id, title: str) -> ChatSession:
     # Ensure Django session key exists before binding to anonymous session.
     if not request.user.is_authenticated and not request.session.session_key:
         request.session.save()
+    workspace = resolve_active_workspace(request)
     return ChatSession.objects.create(
         user=request.user if request.user.is_authenticated else None,
         session_key="" if request.user.is_authenticated else (request.session.session_key or ""),
+        workspace=workspace,
         role="team_member",
         title=title[:80],
     )

@@ -5,7 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### [0.3.0] — 2026-07-14 — Milestone M2: Dataset Versioning & History
+### [0.4.0] — 2026-07-14 — Phase 3: Workspace Foundation
+
+### Added
+- **Workspace Model**: Introduced `Workspace` to logically partition data ownership for authenticated users.
+- **Backfill Migration**: Created Django schema and data migration to automatically allocate default workspaces to existing users and transition their datasets, dashboard states, and chat sessions.
+- **Active Workspace Resolver**: Implemented `resolve_active_workspace()` helper in `request_context.py` to handle lookup and dynamic lazy-creation of workspace contexts.
+- **Workspace Scoping**: Updated request context filters and chat orchestration to isolate listings, upload actions, and chat sessions by workspace.
+- **Tests**: Appended `WorkspaceTests` class to [tests.py](file:///d:/.Study/pep%20class/Django/ai_assistant/analytics_assistant/tests.py) covering auto-creation, isolation checks, and anonymous user session preservation.
+
+---
+
+## [0.3.1] — 2026-07-14 — Pre-Phase 3 Audit
+
+### Removed
+- **Legacy Role Selector**: Deleted the legacy cosmetic role selector, style selectors, API paths, roles module, and associated tests to prepare for Phase 3 RBAC.
+
+---
 
 ### Added
 - **Dataset Versioning & History**:

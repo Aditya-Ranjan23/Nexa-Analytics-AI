@@ -160,6 +160,8 @@ def persist_dataset_activation(
             create_kwargs["source_url"] = source_url
 
         create_kwargs.update(ownership_filter_kwargs(request))
+        if request.user.is_authenticated:
+            create_kwargs["owner"] = request.user
 
         upload_record = DatasetUpload.objects.create(**create_kwargs)
         
