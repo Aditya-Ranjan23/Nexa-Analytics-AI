@@ -32,7 +32,7 @@ Phase 1 focused on **stabilization**: no new product features; hardening archite
 │                                                                  │
 │  ┌─────────────┐  ┌──────────────┐  ┌─────────────────────────┐ │
 │  │ views.py    │  │ serializers  │  │ request_context.py      │ │
-│  │ (thin HTTP) │  │ (validation) │  │ (role + dashboard state)│ │
+│  │ (thin HTTP) │  │ (validation) │  │ (dashboard state)       │ │
 │  └──────┬──────┘  └──────────────┘  └─────────────────────────┘ │
 │         │                                                        │
 │  ┌──────┴──────┬──────────────┬──────────────┬─────────────────┐ │
@@ -72,7 +72,7 @@ Phase 1 focused on **stabilization**: no new product features; hardening archite
 |--------|----------------|----------------|
 | `views.py` | 199 | Thin REST controllers; delegates to services |
 | `serializers.py` | 24 | DRF input validation (chat, upload-link, blueprint, ingestion) |
-| `request_context.py` | 34 | `role_from_request`, `resolve_dashboard_state`, session ownership |
+| `request_context.py` | 34 | `resolve_dashboard_state`, session ownership |
 | `urls.py` | 25 | Route table (9 endpoints + dashboard UI) |
 
 ### 3.2 Service Layer
@@ -109,7 +109,6 @@ Phase 1 focused on **stabilization**: no new product features; hardening archite
 | Module | Responsibility |
 |--------|----------------|
 | `models.py` | ChatSession, ChatMessage, DatasetUpload, DatasetVersion, DashboardState, IngestionJob |
-| `roles.py` | Role normalization, widget definitions, KPI filtering |
 | `admin.py` | Django admin for all models |
 
 ### 3.6 Frontend
@@ -117,7 +116,7 @@ Phase 1 focused on **stabilization**: no new product features; hardening archite
 | Asset | Responsibility |
 |-------|----------------|
 | `templates/.../dashboard.html` | 4-tab SPA shell (Dashboard, Upload, Insights, Ask AI) |
-| `static/js/dashboard.js` | API client, Chart.js rendering, role KPI filter, chat UI |
+| `static/js/dashboard.js` | API client, Chart.js rendering, chat UI |
 | `static/css/dashboard.css` | Dashboard styling |
 
 ---
@@ -171,7 +170,6 @@ Mode detection: `schema.validate_dataset_columns()` + column subset check in `an
 |--------|------|---------|
 | GET | `/` | Dashboard UI |
 | GET | `/api/analytics/summary/` | Full analytics payload |
-| GET | `/api/dashboard/role/` | Role-scoped widgets + KPIs |
 | POST | `/api/chat/` | AI chat with session memory |
 | GET/POST | `/api/dashboard/blueprint/` | Load/save blueprint override |
 | POST | `/api/data/upload/` | File upload (CSV/Excel) |
@@ -255,7 +253,7 @@ python manage.py check
 python manage.py test analytics_assistant   # 31 tests
 ```
 
-Test categories: schema, roles, URL safety, analytics engines, dataset pipeline, chat scoping, API integration.
+Test categories: schema, URL safety, analytics engines, dataset pipeline, chat scoping, API integration.
 
 ---
 

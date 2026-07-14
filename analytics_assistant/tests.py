@@ -18,11 +18,6 @@ from analytics_assistant.dataset_pipeline import (
 from analytics_assistant.dataset_profile import profile_for_blueprint
 from analytics_assistant.models import ChatSession, DatasetUpload, DatasetVersion
 from analytics_assistant.request_context import session_belongs_to_request
-from analytics_assistant.roles import (
-    filter_kpi_cards_for_role,
-    normalize_role,
-    widgets_for_role,
-)
 from analytics_assistant.schema import validate_dataset_columns
 from analytics_assistant.url_safety import (
     validate_public_http_url,
@@ -61,27 +56,7 @@ class SchemaTests(SimpleTestCase):
         self.assertEqual(mode, "generic")
 
 
-class RoleTests(SimpleTestCase):
-    def test_normalize_role_aliases(self):
-        self.assertEqual(normalize_role("marketing"), "marketing_manager")
-        self.assertEqual(normalize_role(""), "team_member")
 
-    def test_widgets_vary_by_role(self):
-        self.assertIn("roas", widgets_for_role("ceo"))
-        self.assertIn("campaign_actions", widgets_for_role("marketing_manager"))
-
-    def test_filter_kpi_cards_for_role_matches_widgets(self):
-        cards = [
-            {"key": "revenue_total", "label": "Revenue", "value": 100},
-            {"key": "ad_spend_total", "label": "Spend", "value": 50},
-        ]
-        filtered = filter_kpi_cards_for_role(cards, "ceo")
-        self.assertEqual([card["key"] for card in filtered], ["revenue_total"])
-
-    def test_filter_kpi_cards_fallback_for_generic_keys(self):
-        cards = [{"key": "Sales_total", "label": "Sales", "value": 100}]
-        filtered = filter_kpi_cards_for_role(cards, "ceo")
-        self.assertEqual(filtered, cards)
 
 
 class UrlSafetyTests(SimpleTestCase):
@@ -175,7 +150,7 @@ class DatasetPipelineTests(TestCase):
 
 class AnalyticsPayloadTests(TestCase):
     def test_build_analytics_payload_with_default_dataset(self):
-        payload = build_analytics_payload(role="team_member")
+        payload = build_analytics_payload()
         self.assertGreater(payload["records"], 0)
         self.assertIn("kpi_cards", payload)
         self.assertIn("charts", payload)
@@ -211,22 +186,21 @@ class ApiIntegrationTests(TestCase):
         self.assertEqual(response.json()["status"], "ok")
 
     def test_analytics_summary_returns_payload(self):
-        response = self.client.get("/api/analytics/summary/?role=ceo")
+        response = self.client.get("/api/analytics/summary/")
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn("kpi_cards", data)
         self.assertIn("widgets", data)
-        self.assertEqual(data["role"], "ceo")
 
     def test_chat_requires_message(self):
-        response = self.client.post("/api/chat/", {"role": "team_member"}, format="json")
+        response = self.client.post("/api/chat/", {}, format="json")
         self.assertEqual(response.status_code, 400)
         self.assertIn("message", response.json())
 
     def test_chat_accepts_valid_message(self):
         response = self.client.post(
             "/api/chat/",
-            {"message": "What trends do you see?", "role": "team_member"},
+            {"message": "What trends do you see?"},
             format="json",
         )
         self.assertEqual(response.status_code, 200)

@@ -18,7 +18,7 @@ def build_memory_context(session: ChatSession, max_items: int = 8) -> str:
     return "\n".join(f"{msg.role}: {msg.content}" for msg in ordered)
 
 
-def resolve_chat_session(request, session_id, role: str, title: str) -> ChatSession:
+def resolve_chat_session(request, session_id, title: str) -> ChatSession:
     if session_id:
         session = ChatSession.objects.filter(id=session_id).first()
         if session and session_belongs_to_request(session, request):
@@ -35,7 +35,7 @@ def resolve_chat_session(request, session_id, role: str, title: str) -> ChatSess
     return ChatSession.objects.create(
         user=request.user if request.user.is_authenticated else None,
         session_key="" if request.user.is_authenticated else (request.session.session_key or ""),
-        role=role,
+        role="team_member",
         title=title[:80],
     )
 
@@ -44,16 +44,14 @@ def process_chat(
     request,
     *,
     user_message: str,
-    role: str,
     session_id=None,
     dataset_upload=None,
     blueprint_override=None,
 ) -> dict:
-    session = resolve_chat_session(request, session_id, role, title=user_message)
+    session = resolve_chat_session(request, session_id, title=user_message)
     ChatMessage.objects.create(session=session, role="user", content=user_message)
 
     analytics_snapshot = build_analytics_payload(
-        role=role,
         dataset_upload=dataset_upload,
         blueprint_override=blueprint_override,
     )
@@ -68,5 +66,5 @@ def process_chat(
         "reply": answer,
         "powered_by_nvidia": bool(settings.NVIDIA_API_KEY),
         "session_id": session.id,
-        "role": role,
+        "role": session.role,
     }

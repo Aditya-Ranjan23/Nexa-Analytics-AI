@@ -9,7 +9,6 @@ const chatWindow = document.getElementById("chatWindow");
 const chatForm = document.getElementById("chatForm");
 const chatInput = document.getElementById("chatInput");
 const chatTyping = document.getElementById("chatTyping");
-const roleSelect = document.getElementById("roleSelect");
 const uploadForm = document.getElementById("uploadForm");
 const datasetFile = document.getElementById("datasetFile");
 const dropzone = document.getElementById("dropzone");
@@ -260,16 +259,6 @@ function formatKpiValue(card) {
     return value.toLocaleString();
 }
 
-function filterKpiCardsForRole(cards, widgets) {
-    if (!Array.isArray(cards) || !cards.length) return cards;
-    if (!Array.isArray(widgets) || !widgets.length) return cards;
-    const nonKpi = new Set(["trend_summary", "top_channels", "campaign_actions"]);
-    const widgetKeys = new Set(widgets.filter((key) => !nonKpi.has(key)));
-    if (!widgetKeys.size) return cards;
-    const filtered = cards.filter((card) => widgetKeys.has(card.key));
-    return filtered.length ? filtered : cards;
-}
-
 function normalizeKpiCards(data) {
     let cards;
     if (Array.isArray(data.kpi_cards) && data.kpi_cards.length) {
@@ -289,7 +278,7 @@ function normalizeKpiCards(data) {
             }))
             .slice(0, KPI_MAX);
     }
-    return filterKpiCardsForRole(cards, data.widgets);
+    return cards;
 }
 
 function renderKpis(data) {
@@ -497,8 +486,7 @@ function applyDashboardData(data) {
 
 async function loadDashboard() {
     try {
-        const role = roleSelect?.value || "team_member";
-        const response = await apiFetch(`/api/analytics/summary/?role=${encodeURIComponent(role)}`);
+        const response = await apiFetch("/api/analytics/summary/");
         if (!response.ok) throw new Error(`Summary API failed (${response.status})`);
         const data = await response.json();
         applyDashboardData(data);
@@ -555,12 +543,7 @@ datasetFile?.addEventListener("change", () => {
     updateSelectedFileName(datasetFile.files?.[0] || null);
 });
 
-roleSelect?.addEventListener("change", () => {
-    sessionId = null;
-    chatWelcomed = false;
-    chatWindow.innerHTML = "";
-    loadDashboard();
-});
+
 
 tabButtons.forEach((btn) => {
     btn.addEventListener("click", (event) => {
@@ -705,7 +688,6 @@ chatForm?.addEventListener("submit", async (event) => {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 message,
-                role: roleSelect?.value || "team_member",
                 session_id: sessionId,
             }),
         });
@@ -713,7 +695,7 @@ chatForm?.addEventListener("submit", async (event) => {
         const data = await response.json();
         sessionId = data.session_id;
         const sourceTag = data.powered_by_nvidia ? "NVIDIA" : "Fallback";
-        addMessage("bot", data.reply, `${sourceTag} · ${data.role}`);
+        addMessage("bot", data.reply, sourceTag);
     } catch (error) {
         addMessage("bot", `Assistant request failed: ${error.message}`, "System");
     } finally {

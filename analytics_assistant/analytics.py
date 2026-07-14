@@ -13,13 +13,12 @@ from .dataset_pipeline import active_blueprint, load_active_dataframe
 from .insights_engine import build_ai_insights, build_generic_insights
 from .kpi_engine import build_ads_kpi_cards, build_kpi_cards_for_metrics
 from .models import DatasetUpload
-from .roles import filter_kpi_cards_for_role, widgets_for_role
 from .services import generate_dataset_brief
 
 ADS_COLUMNS = {"date", "channel", "revenue", "orders", "ad_spend", "conversion_rate"}
 
 
-def _empty_payload(role: str) -> dict:
+def _empty_payload() -> dict:
     return {
         "dataset_mode": "generic",
         "kpi_cards": [],
@@ -34,14 +33,12 @@ def _empty_payload(role: str) -> dict:
         "ai_summary": "Upload a dataset to generate an AI summary.",
         "records": 0,
         "columns": [],
-        "role": role,
-        "widgets": widgets_for_role(role),
+        "widgets": ["revenue_total", "orders_total", "top_channels"],
     }
 
 
 def build_generic_payload(
     df,
-    role: str,
     dataset_upload: DatasetUpload | None = None,
     blueprint_override: dict | None = None,
 ) -> dict:
@@ -109,9 +106,6 @@ def build_generic_payload(
     }
     ai_summary = generate_dataset_brief(brief_profile)
 
-    kpi_cards = filter_kpi_cards_for_role(kpi_cards, role)
-    kpis = {card["key"]: card["value"] for card in kpi_cards}
-
     return {
         "dataset_mode": "generic",
         "kpi_cards": kpi_cards,
@@ -125,12 +119,11 @@ def build_generic_payload(
         "import_meta": blueprint.get("import_meta", {}),
         "records": int(len(df)),
         "columns": df.columns.tolist(),
-        "role": role,
-        "widgets": widgets_for_role(role),
+        "widgets": ["revenue_total", "orders_total", "top_channels"],
     }
 
 
-def build_ads_payload(df, role: str) -> dict:
+def build_ads_payload(df) -> dict:
     df = df.copy()
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df = df.dropna(subset=["date"])
@@ -157,7 +150,6 @@ def build_ads_payload(df, role: str) -> dict:
         revenue_total, orders_total, ad_spend_total, conversion_avg, roas, by_day
     )
     charts = build_ads_charts(by_day, top_channels)
-    kpi_cards = filter_kpi_cards_for_role(kpi_cards, role)
 
     return {
         "dataset_mode": "ads",
@@ -179,21 +171,27 @@ def build_ads_payload(df, role: str) -> dict:
         ),
         "records": int(len(df)),
         "columns": df.columns.tolist(),
-        "role": role,
-        "widgets": widgets_for_role(role),
+        "widgets": [
+            "revenue_total",
+            "orders_total",
+            "ad_spend_total",
+            "roas",
+            "average_conversion_rate",
+            "top_channels",
+            "campaign_actions",
+        ],
     }
 
 
 def build_analytics_payload(
-    role: str = "team_member",
     dataset_upload: DatasetUpload | None = None,
     blueprint_override: dict | None = None,
 ) -> dict:
     df = load_active_dataframe(dataset_upload)
     if df.empty:
-        return _empty_payload(role)
+        return _empty_payload()
 
     if not ADS_COLUMNS.issubset(set(df.columns)):
-        return build_generic_payload(df, role, dataset_upload, blueprint_override)
+        return build_generic_payload(df, dataset_upload, blueprint_override)
 
-    return build_ads_payload(df, role)
+    return build_ads_payload(df)

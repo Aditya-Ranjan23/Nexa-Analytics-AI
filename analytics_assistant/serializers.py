@@ -4,7 +4,6 @@ from .models import DatasetUpload, DatasetVersion
 
 class ChatRequestSerializer(serializers.Serializer):
     message = serializers.CharField(trim_whitespace=True, max_length=4000)
-    role = serializers.CharField(required=False, allow_blank=True, max_length=32)
     session_id = serializers.IntegerField(required=False, allow_null=True, min_value=1)
 
     def validate_message(self, value: str) -> str:

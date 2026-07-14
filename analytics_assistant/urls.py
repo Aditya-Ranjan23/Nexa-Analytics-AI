@@ -8,7 +8,6 @@ from .views import (
     dataset_upload,
     dataset_upload_link,
     health_check,
-    role_dashboard,
     run_ingestion,
     dataset_list,
     dataset_detail,
@@ -25,7 +24,6 @@ from .views import (
 urlpatterns = [
     path("", dashboard, name="dashboard"),
     path("api/analytics/summary/", analytics_summary, name="analytics_summary"),
-    path("api/dashboard/role/", role_dashboard, name="role_dashboard"),
     path("api/chat/", assistant_chat, name="assistant_chat"),
     path("api/dashboard/blueprint/", dashboard_blueprint, name="dashboard_blueprint"),
     path("api/data/upload/", dataset_upload, name="dataset_upload"),

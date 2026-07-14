@@ -9,7 +9,6 @@ AI-powered analytics dashboard backed by Django, NVIDIA AI, and a modular analyt
 - Full Django backend with analytics and AI chat APIs
 - Modern dashboard frontend with KPI cards, trend chart, and assistant chat
 - NVIDIA `build.nvidia.com` integration-ready service layer (falls back to local response)
-- Role-aware dashboard (CEO, Marketing Manager, Team Member)
 - Session-based chat memory persisted in DB
 - Dataset upload (CSV/Excel) with auto schema detection and AI dashboard blueprint
 - URL-ingested datasets with SSRF protection (DNS-aware + redirect-chain validation)
@@ -49,9 +48,8 @@ python manage.py runserver
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/analytics/summary/` | KPIs, trends, channel performance (`?role=ceo\|marketing_manager\|team_member`) |
-| `GET` | `/api/dashboard/role/` | Role-scoped widgets and KPI payload |
-| `POST` | `/api/chat/` | AI chat — body: `{"message": "...", "role": "...", "session_id": 12}` |
+| `GET` | `/api/analytics/summary/` | KPIs, trends, channel performance |
+| `POST` | `/api/chat/` | AI chat — body: `{"message": "...", "session_id": 12}` |
 | `POST` | `/api/data/upload/` | Multipart CSV/Excel upload with auto schema detection |
 | `POST` | `/api/data/upload-link/` | JSON `{"url": "https://..."}` to ingest remote dataset |
 | `POST` | `/api/ingestion/run/` | Manual ingestion job trigger |
@@ -86,7 +84,7 @@ analytics_assistant/ Backend app (views, analytics engines, services, tests)
   ├── throttles.py   DRF scoped rate limit classes
   ├── services.py    NVIDIA AI service layer
   ├── models.py      ChatSession, DatasetUpload, DashboardState, IngestionJob
-  └── tests.py       57 automated tests
+  └── tests.py       71 automated tests
 templates/           Dashboard HTML
 static/              CSS + JS
 data/sales_data.csv  Seed dataset (HR analytics, zero-config fallback)
@@ -104,14 +102,6 @@ docs/                Architecture, security, deployment, debt register, changelo
 | [TECHNICAL_DEBT.md](docs/TECHNICAL_DEBT.md) | Known limitations and Phase 2 roadmap |
 | [CHANGELOG.md](docs/CHANGELOG.md) | Version history |
 
-## Roles
-
-- `ceo` — revenue, ROAS, top-line KPIs
-- `marketing_manager` — campaign actions, channel breakdown
-- `team_member` — general analytics
-
-Roles resolved from authenticated user groups (logged in) or `?role=` query param.
-
 ## Dataset Modes
 
 - **Ads mode** — requires `date, channel, revenue, orders, ad_spend, conversion_rate`
@@ -120,6 +110,6 @@ Roles resolved from authenticated user groups (logged in) or `?role=` query para
 ## Running Tests
 
 ```bash
-python manage.py test analytics_assistant --verbosity=2
-# 57 tests, ~3 seconds
+python manage.py test --verbosity=2
+# 71 tests
 ```

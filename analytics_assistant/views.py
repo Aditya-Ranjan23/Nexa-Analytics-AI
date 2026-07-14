@@ -10,7 +10,7 @@ import pandas as pd
 from .analytics import build_analytics_payload
 from .chat_service import process_chat
 from .models import IngestionJob, DatasetUpload, DatasetVersion
-from .request_context import resolve_dashboard_state, role_from_request, user_dataset_queryset, ownership_filter_kwargs
+from .request_context import resolve_dashboard_state, user_dataset_queryset, ownership_filter_kwargs
 from .serializers import (
     BlueprintSerializer,
     ChatRequestSerializer,
@@ -37,10 +37,8 @@ def dashboard(request):
 
 @api_view(["GET"])
 def analytics_summary(request):
-    role = role_from_request(request)
     state = resolve_dashboard_state(request)
     payload = build_analytics_payload(
-        role=role,
         dataset_upload=state.active_upload,
         blueprint_override=state.blueprint_override,
     )
@@ -53,39 +51,16 @@ def assistant_chat(request):
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    role = role_from_request(request)
     state = resolve_dashboard_state(request)
     data = serializer.validated_data
     result = process_chat(
         request,
         user_message=data["message"],
-        role=role,
         session_id=data.get("session_id"),
         dataset_upload=state.active_upload,
         blueprint_override=state.blueprint_override,
     )
     return Response(result, status=status.HTTP_200_OK)
-
-
-@api_view(["GET"])
-def role_dashboard(request):
-    role = role_from_request(request)
-    state = resolve_dashboard_state(request)
-    payload = build_analytics_payload(
-        role=role,
-        dataset_upload=state.active_upload,
-        blueprint_override=state.blueprint_override,
-    )
-    return Response(
-        {
-            "role": role,
-            "widgets": payload["widgets"],
-            "kpis": payload["kpis"],
-            "top_dimensions": payload.get("top_dimensions", []),
-            "dataset_mode": payload.get("dataset_mode", "generic"),
-        },
-        status=status.HTTP_200_OK,
-    )
 
 
 @api_view(["POST"])
@@ -150,7 +125,6 @@ def run_ingestion(request):
     try:
         state = resolve_dashboard_state(request)
         payload = build_analytics_payload(
-            role="team_member",
             dataset_upload=state.active_upload,
             blueprint_override=state.blueprint_override,
         )
