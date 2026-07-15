@@ -438,7 +438,7 @@ class HealthCheckTests(TestCase):
         response = self.client.get("/health/")
         data = response.json()
         self.assertIn("version", data)
-        self.assertEqual(data["version"], "0.3.0")
+        self.assertEqual(data["version"], "0.4.0")
 
     def test_health_check_includes_database_check(self):
         response = self.client.get("/health/")
@@ -878,4 +878,152 @@ class WorkspaceTests(TestCase):
         state = resolve_dashboard_state(request)
         self.assertIsNone(state.workspace)
         self.assertEqual(state.session_key, "anon_key_1")
+
+
+class AuthenticationTests(TestCase):
+    def test_register_creates_user_profile_and_workspace(self):
+        response = self.client.post(
+            "/register/",
+            {
+                "username": "newuser",
+                "email": "newuser@example.com",
+                "password1": "StrongPass123_!",
+                "password2": "StrongPass123_!",
+            },
+        )
+        self.assertEqual(response.status_code, 302)  # Redirects to dashboard
+
+        # Verify database structures
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        user = User.objects.get(username="newuser")
+        self.assertEqual(user.email, "newuser@example.com")
+
+        # Verify workspace is created
+        self.assertEqual(user.workspaces.count(), 1)
+        self.assertEqual(user.workspaces.first().name, "newuser's Workspace")
+
+        # Verify profile is created
+        self.assertIsNotNone(user.profile)
+        self.assertEqual(user.profile.timezone, "UTC")
+
+    def test_login_remember_me(self):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        User.objects.create_user(username="testlogin", password="StrongPass123_!")
+
+        # Test with remember_me
+        response = self.client.post(
+            "/login/",
+            {"username": "testlogin", "password": "StrongPass123_!", "remember_me": "true"},
+        )
+        self.assertEqual(response.status_code, 302)
+        # 2 weeks expiry (1209600 seconds)
+        self.assertEqual(self.client.session.get_expiry_age(), 1209600)
+        self.assertFalse(self.client.session.get_expire_at_browser_close())
+
+        # Test without remember_me
+        self.client.logout()
+        response = self.client.post(
+            "/login/",
+            {"username": "testlogin", "password": "StrongPass123_!"},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(self.client.session.get_expire_at_browser_close())
+
+    def test_anonymous_datasets_claimed_on_login(self):
+        self.client.get("/")
+        anon_session_key = self.client.session.session_key
+        self.assertTrue(anon_session_key)
+
+        dataset = DatasetUpload.objects.create(
+            session_key=anon_session_key,
+            source_type="file",
+            name="anon_data.csv",
+            status="processed",
+        )
+
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        User.objects.create_user(username="testclaim", password="StrongPass123_!")
+
+        response = self.client.post(
+            "/login/",
+            {"username": "testclaim", "password": "StrongPass123_!"},
+        )
+        self.assertEqual(response.status_code, 302)
+
+        dataset.refresh_from_db()
+        self.assertIsNotNone(dataset.workspace)
+        self.assertEqual(dataset.owner.username, "testclaim")
+
+
+class UserProfileAndSettingsTests(TestCase):
+    def setUp(self):
+        from rest_framework.test import APIClient
+        self.client = APIClient()
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        self.user = User.objects.create_user(username="settingsuser", password="StrongPass123_!", email="settings@example.com")
+        
+        # Pre-provision default workspace
+        from analytics_assistant.request_context import resolve_active_workspace
+        dummy_req = type("Req", (), {"user": self.user})()
+        resolve_active_workspace(dummy_req)
+        
+        self.client.force_authenticate(user=self.user)
+
+    def test_update_profile(self):
+        response = self.client.post(
+            "/api/profile/update/",
+            {
+                "display_name": "Settings User Display",
+                "bio": "Bio content here",
+                "timezone": "Europe/London",
+                "email": "newsettings@example.com",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["display_name"], "Settings User Display")
+        self.assertEqual(data["email"], "newsettings@example.com")
+        
+        # Verify db profile
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.profile.display_name, "Settings User Display")
+        self.assertEqual(self.user.profile.bio, "Bio content here")
+        self.assertEqual(self.user.profile.timezone, "Europe/London")
+        self.assertEqual(self.user.email, "newsettings@example.com")
+
+    def test_update_settings(self):
+        response = self.client.post(
+            "/api/settings/update/",
+            {"theme_preference": "light"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["theme_preference"], "light")
+        
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.profile.theme_preference, "light")
+
+    def test_export_account_data(self):
+        response = self.client.get("/api/settings/export-data/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["user"]["username"], "settingsuser")
+        self.assertIn("workspaces", data)
+
+    def test_delete_account(self):
+        response = self.client.post("/api/settings/delete-account/")
+        self.assertEqual(response.status_code, 200)
+        
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        self.assertFalse(User.objects.filter(username="settingsuser").exists())
+
+
+
 

@@ -248,3 +248,32 @@ class DashboardState(models.Model):
 
     def __str__(self):
         return f"state:{self.user_id or self.session_key}"
+
+
+class UserProfile(models.Model):
+    """Extension profile mapping to standard django User model."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="profile",
+    )
+    display_name = models.CharField(max_length=150, blank=True, default="")
+    avatar = models.ImageField(upload_to="avatars/", null=True, blank=True)
+    bio = models.TextField(blank=True, default="")
+    timezone = models.CharField(max_length=64, default="UTC")
+    theme_preference = models.CharField(max_length=16, default="dark")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Profile for {self.user.username}"
+
+
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+@receiver(post_save, sender=settings.AUTH_USER_MODEL)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        UserProfile.objects.get_or_create(user=instance)
+

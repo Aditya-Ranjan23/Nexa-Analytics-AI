@@ -29,10 +29,92 @@ from .dataset_pipeline import restore_dataset_version, load_dataframe_from_path
 
 logger = logging.getLogger(__name__)
 
+from django.contrib.auth import login as auth_login
+from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth import get_user_model
+from django.shortcuts import render, redirect
+
+from django.contrib.auth.views import LoginView
+
+class CustomUserCreationForm(UserCreationForm):
+    class Meta(UserCreationForm.Meta):
+        model = get_user_model()
+        fields = UserCreationForm.Meta.fields + ("email",)
+
+class CustomLoginView(LoginView):
+    template_name = "registration/login.html"
+
+    def post(self, request, *args, **kwargs):
+        self.anon_session_key = request.session.session_key
+        return super().post(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        remember_me = self.request.POST.get("remember_me")
+        if remember_me:
+            # 2 weeks
+            self.request.session.set_expiry(1209600)
+        else:
+            # Browser close
+            self.request.session.set_expiry(0)
+        
+        response = super().form_valid(form)
+        
+        if getattr(self, "anon_session_key", None):
+            from .request_context import resolve_active_workspace
+            workspace = resolve_active_workspace(self.request)
+            DatasetUpload.objects.filter(
+                session_key=self.anon_session_key,
+                workspace__isnull=True
+            ).update(workspace=workspace, owner=self.request.user)
+            
+        return response
+
+def register(request):
+    if request.method == "POST":
+        anon_session_key = request.session.session_key
+        form = CustomUserCreationForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            from .request_context import resolve_active_workspace
+            # Pre-provision default workspace
+            dummy_req = type("Req", (), {"user": user})()
+            workspace = resolve_active_workspace(dummy_req)
+
+            auth_login(request, user)
+            
+            if anon_session_key:
+                DatasetUpload.objects.filter(
+                    session_key=anon_session_key,
+                    workspace__isnull=True
+                ).update(workspace=workspace, owner=user)
+                
+            return redirect("dashboard")
+    else:
+        form = CustomUserCreationForm()
+    return render(request, "registration/register.html", {"form": form})
+
 
 @ensure_csrf_cookie
 def dashboard(request):
-    return render(request, "analytics_assistant/dashboard.html")
+    state = resolve_dashboard_state(request)
+    has_datasets = False
+    if request.user.is_authenticated:
+        from .request_context import resolve_active_workspace
+        ws = resolve_active_workspace(request)
+        has_datasets = ws.datasets.filter(is_archived=False).exists()
+    else:
+        # Check anonymous datasets
+        has_datasets = DatasetUpload.objects.filter(
+            session_key=request.session.session_key or "",
+            workspace__isnull=True,
+            is_archived=False
+        ).exists()
+
+    context = {
+        "active_upload": state.active_upload,
+        "has_datasets": has_datasets,
+    }
+    return render(request, "analytics_assistant/dashboard.html", context)
 
 
 @api_view(["GET"])
@@ -468,10 +550,134 @@ def health_check(request):
 
     payload = {
         "status": "ok" if db_ok else "degraded",
-        "version": "0.3.0",
+        "version": "0.4.0",
         "checks": {
             "database": "ok" if db_ok else f"error: {db_error}",
         },
     }
     http_status = 200 if db_ok else 503
     return JsonResponse(payload, status=http_status)
+
+
+@api_view(["POST"])
+def update_profile(request):
+    if not request.user.is_authenticated:
+        return Response({"detail": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
+    profile = request.user.profile
+
+    display_name = request.data.get("display_name")
+    bio = request.data.get("bio")
+    timezone = request.data.get("timezone")
+    avatar = request.FILES.get("avatar")
+
+    if display_name is not None:
+        profile.display_name = display_name
+    if bio is not None:
+        profile.bio = bio
+    if timezone is not None:
+        profile.timezone = timezone
+    if avatar is not None:
+        profile.avatar = avatar
+
+    profile.save()
+
+    email = request.data.get("email")
+    if email is not None:
+        request.user.email = email
+        request.user.save()
+
+    return Response({
+        "display_name": profile.display_name,
+        "email": request.user.email,
+        "bio": profile.bio,
+        "timezone": profile.timezone,
+        "avatar_url": profile.avatar.url if profile.avatar else None,
+        "detail": "Profile updated successfully"
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+def update_settings(request):
+    if not request.user.is_authenticated:
+        return Response({"detail": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
+    profile = request.user.profile
+
+    theme_preference = request.data.get("theme_preference")
+    if theme_preference is not None:
+        profile.theme_preference = theme_preference
+        profile.save()
+
+    return Response({
+        "theme_preference": profile.theme_preference,
+        "detail": "Settings updated successfully"
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+def export_account_data(request):
+    from django.http import HttpResponse
+    import json
+    if not request.user.is_authenticated:
+        return Response({"detail": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    user = request.user
+    profile = user.profile
+
+    export_data = {
+        "user": {
+            "username": user.username,
+            "email": user.email,
+            "display_name": profile.display_name,
+            "bio": profile.bio,
+            "timezone": profile.timezone,
+            "theme_preference": profile.theme_preference,
+            "date_joined": user.date_joined.isoformat() if user.date_joined else "",
+        },
+        "workspaces": [],
+    }
+
+    for ws in user.workspaces.all():
+        ws_data = {
+            "name": ws.name,
+            "created_at": ws.created_at.isoformat() if ws.created_at else "",
+            "datasets": [],
+            "chat_sessions": [],
+        }
+        for ds in ws.datasets.all():
+            ws_data["datasets"].append({
+                "name": ds.name,
+                "description": ds.description,
+                "source_type": ds.source_type,
+                "row_count": ds.row_count,
+                "status": ds.status,
+                "created_at": ds.created_at.isoformat() if ds.created_at else "",
+            })
+        for sess in ws.chat_sessions.all():
+            sess_data = {
+                "title": sess.title,
+                "role": sess.role,
+                "created_at": sess.created_at.isoformat() if sess.created_at else "",
+                "messages": [],
+            }
+            for msg in sess.messages.all():
+                sess_data["messages"].append({
+                    "role": msg.role,
+                    "content": msg.content,
+                    "created_at": msg.created_at.isoformat() if msg.created_at else "",
+                })
+            ws_data["chat_sessions"].append(sess_data)
+        export_data["workspaces"].append(ws_data)
+
+    return Response(export_data, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+def delete_account(request):
+    if not request.user.is_authenticated:
+        return Response({"detail": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    user = request.user
+    from django.contrib.auth import logout
+    logout(request)
+    user.delete()
+    return Response({"deleted": True, "detail": "Account deleted successfully"}, status=status.HTTP_200_OK)

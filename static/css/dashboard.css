@@ -1214,3 +1214,308 @@ body {
     background: rgba(255, 255, 255, 0.01);
 }
 
+/* ─── Auth Nav Links ──────────────────────────────────────── */
+.tab-link-action {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.95rem 1.2rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-family: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease;
+    border-radius: 0;
+    white-space: nowrap;
+}
+.logout-link {
+    color: #f87171;
+    margin-left: auto;
+}
+.logout-link:hover {
+    background: rgba(248, 113, 113, 0.08);
+    color: #fca5a5;
+}
+.login-link {
+    color: var(--accent);
+    margin-left: auto;
+}
+.login-link:hover {
+    background: rgba(6, 182, 212, 0.08);
+    color: var(--accent-alt);
+}
+
+/* ─── Onboarding Banner ───────────────────────────────────── */
+.onboarding-banner {
+    border: 1px solid rgba(6, 182, 212, 0.25);
+    background: linear-gradient(135deg, rgba(6, 182, 212, 0.07) 0%, rgba(59, 130, 246, 0.07) 100%);
+}
+.onboarding-header h3 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin: 0 0 0.35rem;
+    color: var(--text);
+}
+.onboarding-header p {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin: 0 0 1.25rem;
+}
+.onboarding-checklist {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+.checklist-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 0.9rem 1.1rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.checklist-status {
+    font-size: 1.1rem;
+    color: var(--accent);
+    line-height: 1.4;
+    flex-shrink: 0;
+}
+.checklist-item strong {
+    display: block;
+    font-size: 0.92rem;
+    color: var(--text);
+    margin-bottom: 0.2rem;
+}
+.checklist-item p {
+    margin: 0;
+    font-size: 0.84rem;
+    color: var(--muted);
+}
+
+/* ─── Profile Panel ───────────────────────────────────────── */
+.profile-layout {
+    max-width: 760px;
+}
+.profile-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1.75rem;
+}
+.profile-avatar-section {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+.avatar-wrapper {
+    position: relative;
+    flex-shrink: 0;
+}
+.avatar-img {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(6, 182, 212, 0.4);
+}
+.avatar-placeholder {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent) 0%, #3b82f6 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #fff;
+    border: 2px solid rgba(6, 182, 212, 0.4);
+    letter-spacing: 0.02em;
+}
+.avatar-change-btn {
+    position: absolute;
+    bottom: -4px;
+    right: -4px;
+    background: rgba(30, 41, 59, 0.92);
+    border: 1px solid rgba(6, 182, 212, 0.35);
+    color: var(--accent);
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.25rem 0.55rem;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.avatar-change-btn:hover {
+    background: rgba(6, 182, 212, 0.15);
+}
+.avatar-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+.avatar-meta strong {
+    font-size: 1.15rem;
+    color: var(--text);
+}
+.avatar-meta span {
+    font-size: 0.88rem;
+    color: var(--muted);
+}
+.profile-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+}
+.form-row-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+@media (max-width: 640px) {
+    .form-row-2 { grid-template-columns: 1fr; }
+}
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+.form-group label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--muted);
+}
+.form-group input,
+.form-group textarea,
+.form-group select {
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.92rem;
+    padding: 0.75rem 1rem;
+    transition: border-color 0.2s;
+    width: 100%;
+    box-sizing: border-box;
+}
+.form-group textarea {
+    resize: vertical;
+    min-height: 88px;
+}
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+.form-group select option {
+    background: #1e293b;
+}
+
+/* ─── Settings Cards ──────────────────────────────────────── */
+.settings-layout {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.25rem;
+    max-width: 1000px;
+}
+.settings-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+.settings-card-head h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0 0 0.25rem;
+}
+.settings-card-head p {
+    font-size: 0.86rem;
+    color: var(--muted);
+    margin: 0;
+}
+.theme-toggle-row {
+    display: flex;
+    gap: 0.75rem;
+}
+.theme-chip {
+    flex: 1;
+    padding: 0.7rem 1rem;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    background: rgba(15, 23, 42, 0.55);
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.theme-chip:hover {
+    border-color: var(--accent);
+    color: var(--text);
+}
+.theme-chip-active {
+    border-color: var(--accent);
+    background: rgba(6, 182, 212, 0.12);
+    color: var(--accent);
+}
+
+/* ─── Danger Zone ─────────────────────────────────────────── */
+.danger-card {
+    border-color: rgba(239, 68, 68, 0.3);
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.05) 0%, rgba(30, 41, 59, 0.5) 100%);
+}
+.danger-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem 1.5rem;
+    border-radius: 10px;
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    background: rgba(239, 68, 68, 0.1);
+    color: #f87171;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: fit-content;
+}
+.danger-btn:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.65);
+    color: #fca5a5;
+}
+.delete-confirm-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: rgba(239, 68, 68, 0.06);
+    border-radius: 10px;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+.delete-confirm-row p {
+    margin: 0;
+    font-size: 0.88rem;
+    color: var(--muted);
+}
+.delete-confirm-row input {
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.9rem;
+    padding: 0.65rem 1rem;
+    transition: border-color 0.2s;
+    width: 100%;
+    box-sizing: border-box;
+}
+.delete-confirm-row input:focus {
+    outline: none;
+    border-color: #ef4444;
+}

@@ -66,7 +66,7 @@ const compareRemovedCount = document.getElementById("compareRemovedCount");
 const compareRemovedCols = document.getElementById("compareRemovedCols");
 const compareStatsBody = document.getElementById("compareStatsBody");
 
-const TAB_IDS = ["dashboard", "data", "insights", "assistant"];
+const TAB_IDS = ["dashboard", "data", "insights", "assistant", "profile", "settings"];
 const KPI_MAX = 8;
 const CHART_PALETTE = [
     { border: "#8b5cf6", bg: "rgba(139, 92, 246, 0.35)" },
@@ -1195,6 +1195,153 @@ closeCompareBtn?.addEventListener("click", () => {
     versionsTableBody.querySelectorAll(".version-select-cb").forEach(cb => cb.checked = false);
     updateCompareButtonState();
 });
+
+/* ─── Profile & Settings Handlers ─────────────────────────── */
+function showStatusBanner(el, message, type) {
+    if (!el) return;
+    el.hidden = false;
+    el.textContent = message;
+    el.className = `status-banner ${type}`;
+    setTimeout(() => { el.hidden = true; }, 4000);
+}
+
+// Profile save
+const profileForm = document.getElementById("profileForm");
+const profileStatus = document.getElementById("profileStatus");
+const avatarInput = document.getElementById("avatarInput");
+
+if (profileForm) {
+    profileForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const payload = {
+            display_name: document.getElementById("profileDisplayName").value,
+            email: document.getElementById("profileEmail").value,
+            bio: document.getElementById("profileBio").value,
+            timezone: document.getElementById("profileTimezone").value,
+        };
+        apiFetch("/api/profile/update/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        })
+            .then((r) => r.json())
+            .then((data) => {
+                if (data.error) {
+                    showStatusBanner(profileStatus, data.error, "error");
+                } else {
+                    showStatusBanner(profileStatus, "Profile updated.", "success");
+                    const nameEl = document.getElementById("profileDisplayNameText");
+                    if (nameEl) nameEl.textContent = data.display_name || data.username;
+                }
+            })
+            .catch(() => showStatusBanner(profileStatus, "Network error.", "error"));
+    });
+}
+
+// Avatar upload
+if (avatarInput) {
+    avatarInput.addEventListener("change", () => {
+        const file = avatarInput.files[0];
+        if (!file) return;
+        const fd = new FormData();
+        fd.append("avatar", file);
+        apiFetch("/api/profile/update/", { method: "POST", body: fd })
+            .then((r) => r.json())
+            .then((data) => {
+                if (data.avatar_url) {
+                    const prev = document.getElementById("avatarPreview");
+                    if (prev) {
+                        if (prev.tagName === "IMG") {
+                            prev.src = data.avatar_url;
+                        } else {
+                            const img = document.createElement("img");
+                            img.src = data.avatar_url;
+                            img.alt = "Avatar";
+                            img.className = "avatar-img";
+                            img.id = "avatarPreview";
+                            prev.replaceWith(img);
+                        }
+                    }
+                    showStatusBanner(profileStatus, "Avatar updated.", "success");
+                }
+            })
+            .catch(() => showStatusBanner(profileStatus, "Avatar upload failed.", "error"));
+    });
+}
+
+// Theme toggle
+const settingsStatus = document.getElementById("settingsStatus");
+document.querySelectorAll(".theme-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+        const theme = chip.dataset.theme;
+        apiFetch("/api/settings/update/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ theme_preference: theme }),
+        })
+            .then((r) => r.json())
+            .then((data) => {
+                if (data.theme_preference) {
+                    document.querySelectorAll(".theme-chip").forEach((c) => c.classList.remove("theme-chip-active"));
+                    chip.classList.add("theme-chip-active");
+                    showStatusBanner(settingsStatus, `Theme set to ${data.theme_preference}.`, "success");
+                }
+            })
+            .catch(() => showStatusBanner(settingsStatus, "Failed to save theme.", "error"));
+    });
+});
+
+// Data export
+const exportDataBtn = document.getElementById("exportDataBtn");
+if (exportDataBtn) {
+    exportDataBtn.addEventListener("click", () => {
+        apiFetch("/api/settings/export-data/")
+            .then((r) => r.json())
+            .then((data) => {
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "nexa_account_export.json";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+            })
+            .catch(() => alert("Export failed."));
+    });
+}
+
+// Account deletion
+const deleteAccountBtn = document.getElementById("deleteAccountBtn");
+const deleteConfirmRow = document.getElementById("deleteConfirmRow");
+const deleteAccountConfirmBtn = document.getElementById("deleteAccountConfirmBtn");
+
+if (deleteAccountBtn) {
+    deleteAccountBtn.addEventListener("click", () => {
+        if (deleteConfirmRow) deleteConfirmRow.hidden = false;
+        deleteAccountBtn.hidden = true;
+    });
+}
+if (deleteAccountConfirmBtn) {
+    deleteAccountConfirmBtn.addEventListener("click", () => {
+        const input = document.getElementById("deleteConfirmInput");
+        if (!input || input.value !== "DELETE") {
+            alert('Please type "DELETE" to confirm.');
+            return;
+        }
+        apiFetch("/api/settings/delete-account/", { method: "POST" })
+            .then((r) => r.json())
+            .then((data) => {
+                if (data.deleted) {
+                    window.location.href = "/login/";
+                } else {
+                    alert(data.error || "Deletion failed.");
+                }
+            })
+            .catch(() => alert("Network error during account deletion."));
+    });
+}
 
 if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initApp);

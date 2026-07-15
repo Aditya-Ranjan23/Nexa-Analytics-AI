@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=3" />
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=4" />
 </head>
 <body>
     <div class="orb orb-one"></div>
@@ -34,7 +34,7 @@
                     Dashboard
                 </button>
                 <button class="tab-link" type="button" role="tab" aria-selected="false" aria-controls="tab-data" data-tab="data" id="tab-btn-data">
-                    Data Upload
+                    Datasets
                 </button>
                 <button class="tab-link" type="button" role="tab" aria-selected="false" aria-controls="tab-insights" data-tab="insights" id="tab-btn-insights">
                     AI Insights
@@ -42,6 +42,21 @@
                 <button class="tab-link" type="button" role="tab" aria-selected="false" aria-controls="tab-assistant" data-tab="assistant" id="tab-btn-assistant">
                     Ask AI
                 </button>
+                {% if request.user.is_authenticated %}
+                <button class="tab-link" type="button" role="tab" aria-selected="false" aria-controls="tab-profile" data-tab="profile" id="tab-btn-profile">
+                    Profile
+                </button>
+                <button class="tab-link" type="button" role="tab" aria-selected="false" aria-controls="tab-settings" data-tab="settings" id="tab-btn-settings">
+                    Settings
+                </button>
+                <a href="{% url 'logout' %}" class="tab-link-action logout-link">
+                    Logout
+                </a>
+                {% else %}
+                <a href="{% url 'login' %}" class="tab-link-action login-link">
+                    Login / Register
+                </a>
+                {% endif %}
             </nav>
 
             <div class="tab-panels">
@@ -54,6 +69,32 @@
                     </div>
                     <button type="button" class="ghost-btn" id="refreshDashboardBtn">Refresh</button>
                 </div>
+                {% if request.user.is_authenticated and not has_datasets %}
+                <!-- Onboarding Quick Start Checklist -->
+                <div class="panel onboarding-banner" id="onboardingBanner" style="margin-bottom: 1.5rem;">
+                    <div class="onboarding-header">
+                        <h3>🚀 Welcome to Nexa Analytics!</h3>
+                        <p>Let's get you set up. Complete these quick steps to launch your first insights dashboard:</p>
+                    </div>
+                    <div class="onboarding-checklist">
+                        <div class="checklist-item">
+                            <span class="checklist-status">◯</span>
+                            <div>
+                                <strong>Upload your first dataset</strong>
+                                <p>Head to the "Datasets" tab and upload a CSV or Excel file.</p>
+                            </div>
+                        </div>
+                        <div class="checklist-item">
+                            <span class="checklist-status">◯</span>
+                            <div>
+                                <strong>Chat with the AI</strong>
+                                <p>Ask a question in plain language on the "Ask AI" tab.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
                 <section class="kpi-grid" id="kpiGrid"></section>
                 <section class="charts-grid" id="chartsGrid"></section>
             </section>
@@ -200,8 +241,138 @@
                     </form>
                 </article>
             </section>
+
+            {% if request.user.is_authenticated %}
+            <!-- Profile Tab -->
+            <section class="tab-panel" id="tab-profile" role="tabpanel" aria-labelledby="tab-btn-profile">
+                <div class="section-head">
+                    <div>
+                        <h2 class="section-title">My Profile</h2>
+                        <p class="section-desc">Update your display name, bio, timezone, and contact details.</p>
+                    </div>
+                </div>
+
+                <div class="profile-layout">
+                    <article class="panel profile-card">
+                        <div class="profile-avatar-section">
+                            <div class="avatar-wrapper">
+                                {% if request.user.profile.avatar %}
+                                    <img src="{{ request.user.profile.avatar.url }}" alt="Avatar" class="avatar-img" id="avatarPreview" />
+                                {% else %}
+                                    <div class="avatar-placeholder" id="avatarPreview">{{ request.user.username|slice:":2"|upper }}</div>
+                                {% endif %}
+                                <label for="avatarInput" class="avatar-change-btn">Change</label>
+                                <input type="file" id="avatarInput" accept="image/*" hidden />
+                            </div>
+                            <div class="avatar-meta">
+                                <strong id="profileDisplayNameText">{{ request.user.profile.display_name|default:request.user.username }}</strong>
+                                <span id="profileUsernameText">@{{ request.user.username }}</span>
+                            </div>
+                        </div>
+
+                        <form id="profileForm" class="profile-form" novalidate>
+                            {% csrf_token %}
+                            <div class="form-row-2">
+                                <div class="form-group">
+                                    <label for="profileDisplayName">Display Name</label>
+                                    <input type="text" id="profileDisplayName" name="display_name" value="{{ request.user.profile.display_name|default:'' }}" placeholder="How you'd like to be called" />
+                                </div>
+                                <div class="form-group">
+                                    <label for="profileEmail">Email Address</label>
+                                    <input type="email" id="profileEmail" name="email" value="{{ request.user.email }}" />
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="profileBio">Short Bio</label>
+                                <textarea id="profileBio" name="bio" rows="3" placeholder="Tell us about yourself…">{{ request.user.profile.bio|default:'' }}</textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="profileTimezone">Timezone</label>
+                                <select id="profileTimezone" name="timezone">
+                                    <option value="UTC" {% if request.user.profile.timezone == 'UTC' %}selected{% endif %}>UTC</option>
+                                    <option value="America/New_York" {% if request.user.profile.timezone == 'America/New_York' %}selected{% endif %}>Eastern (ET)</option>
+                                    <option value="America/Chicago" {% if request.user.profile.timezone == 'America/Chicago' %}selected{% endif %}>Central (CT)</option>
+                                    <option value="America/Denver" {% if request.user.profile.timezone == 'America/Denver' %}selected{% endif %}>Mountain (MT)</option>
+                                    <option value="America/Los_Angeles" {% if request.user.profile.timezone == 'America/Los_Angeles' %}selected{% endif %}>Pacific (PT)</option>
+                                    <option value="Europe/London" {% if request.user.profile.timezone == 'Europe/London' %}selected{% endif %}>London (GMT)</option>
+                                    <option value="Europe/Paris" {% if request.user.profile.timezone == 'Europe/Paris' %}selected{% endif %}>Paris (CET)</option>
+                                    <option value="Asia/Kolkata" {% if request.user.profile.timezone == 'Asia/Kolkata' %}selected{% endif %}>India (IST)</option>
+                                    <option value="Asia/Tokyo" {% if request.user.profile.timezone == 'Asia/Tokyo' %}selected{% endif %}>Tokyo (JST)</option>
+                                    <option value="Australia/Sydney" {% if request.user.profile.timezone == 'Australia/Sydney' %}selected{% endif %}>Sydney (AEST)</option>
+                                </select>
+                            </div>
+                            <div id="profileStatus" class="status-banner" hidden></div>
+                            <button type="submit" class="primary-btn" id="profileSaveBtn">Save Profile</button>
+                        </form>
+                    </article>
+                </div>
+            </section>
+
+            <!-- Settings Tab -->
+            <section class="tab-panel" id="tab-settings" role="tabpanel" aria-labelledby="tab-btn-settings">
+                <div class="section-head">
+                    <div>
+                        <h2 class="section-title">Account Settings</h2>
+                        <p class="section-desc">Manage your theme, account data, and danger-zone actions.</p>
+                    </div>
+                </div>
+
+                <div class="settings-layout">
+                    <!-- Theme -->
+                    <article class="panel settings-card">
+                        <div class="settings-card-head">
+                            <h3>Appearance</h3>
+                            <p>Choose your preferred interface theme.</p>
+                        </div>
+                        <div class="theme-toggle-row">
+                            <button type="button" class="theme-chip {% if request.user.profile.theme_preference == 'dark' %}theme-chip-active{% endif %}" id="themeDark" data-theme="dark">
+                                🌑 Dark
+                            </button>
+                            <button type="button" class="theme-chip {% if request.user.profile.theme_preference == 'light' %}theme-chip-active{% endif %}" id="themeLight" data-theme="light">
+                                ☀️ Light
+                            </button>
+                        </div>
+                        <div id="settingsStatus" class="status-banner" hidden></div>
+                    </article>
+
+                    <!-- Data Export -->
+                    <article class="panel settings-card">
+                        <div class="settings-card-head">
+                            <h3>Export Account Data</h3>
+                            <p>Download a JSON snapshot of your profile, workspaces, and datasets.</p>
+                        </div>
+                        <button type="button" class="ghost-btn" id="exportDataBtn">⬇ Download Data Export</button>
+                    </article>
+
+                    <!-- Password -->
+                    <article class="panel settings-card">
+                        <div class="settings-card-head">
+                            <h3>Change Password</h3>
+                            <p>Use a strong, unique password to protect your account.</p>
+                        </div>
+                        <a href="{% url 'password_reset' %}" class="ghost-btn">Reset via Email</a>
+                    </article>
+
+                    <!-- Danger Zone -->
+                    <article class="panel settings-card danger-card">
+                        <div class="settings-card-head">
+                            <h3>⚠ Danger Zone</h3>
+                            <p>This action is irreversible. All your data will be permanently deleted.</p>
+                        </div>
+                        <button type="button" class="danger-btn" id="deleteAccountBtn">Delete My Account</button>
+                        <div id="deleteConfirmRow" class="delete-confirm-row" hidden>
+                            <p>Type <strong>DELETE</strong> to confirm:</p>
+                            <input type="text" id="deleteConfirmInput" placeholder="DELETE" />
+                            <button type="button" class="danger-btn" id="deleteAccountConfirmBtn">Confirm Delete</button>
+                        </div>
+                    </article>
+                </div>
+            </section>
+            {% endif %}
+
             </div>
         </div>
+
     </main>
 
     <!-- Version History & Comparison Modal -->
@@ -328,6 +499,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
-    <script src="{% static 'js/dashboard.js' %}?v=6"></script>
+    <script src="{% static 'js/dashboard.js' %}?v=7"></script>
 </body>
 </html>
