@@ -26,6 +26,14 @@ from .views import (
     update_settings,
     export_account_data,
     delete_account,
+    test_connector_connection,
+    get_connector_schema,
+    ingest_connector_table,
+    sync_dataset,
+    api_login,
+    api_register,
+    custom_logout,
+    compare_version_insights,
 )
 
 urlpatterns = [
@@ -56,15 +64,26 @@ urlpatterns = [
     # Authentication & Registration
     path("register/", register, name="register"),
     path("login/", CustomLoginView.as_view(), name="login"),
-    path("logout/", auth_views.LogoutView.as_view(next_page="login"), name="logout"),
+    path("logout/", custom_logout, name="logout"),
     path("password-reset/", auth_views.PasswordResetView.as_view(), name="password_reset"),
     path("password-reset/done/", auth_views.PasswordResetDoneView.as_view(), name="password_reset_done"),
     path("password-reset/confirm/<uidb64>/<token>/", auth_views.PasswordResetConfirmView.as_view(), name="password_reset_confirm"),
     path("password-reset/complete/", auth_views.PasswordResetCompleteView.as_view(), name="password_reset_complete"),
+
+    # AJAX Authentication API Endpoints
+    path("api/auth/login/", api_login, name="api_login"),
+    path("api/auth/register/", api_register, name="api_register"),
 
     # Profile & Settings APIs
     path("api/profile/update/", update_profile, name="update_profile"),
     path("api/settings/update/", update_settings, name="update_settings"),
     path("api/settings/export-data/", export_account_data, name="export_account_data"),
     path("api/settings/delete-account/", delete_account, name="delete_account"),
+
+    # Universal Connector Framework APIs
+    path("api/data/connectors/test/", test_connector_connection, name="test_connector_connection"),
+    path("api/data/connectors/schema/", get_connector_schema, name="get_connector_schema"),
+    path("api/data/connectors/ingest/", ingest_connector_table, name="ingest_connector_table"),
+    path("api/data/datasets/<int:pk>/sync/", sync_dataset, name="sync_dataset"),
+    path("api/data/datasets/<int:pk>/versions/compare_insights/", compare_version_insights, name="compare_version_insights"),
 ]

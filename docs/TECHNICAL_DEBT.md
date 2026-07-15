@@ -325,3 +325,4 @@ Phase 2 later
 | 2026-07-13 | Phase 1.5 — Closed TD-003, TD-005, TD-006, TD-017, TD-019 (session isolation, deps, CI, path dedup, redirect SSRF) |
 | 2026-07-13 | Phase 1.5 — TD-004 partially resolved (rate limiting done; API auth deferred to Phase 2) |
 | 2026-07-13 | Phase 1.5 — TD-018 substantially resolved (57 tests; residual gaps deferred to Phase 2 M1) |
+| 2026-07-15 | Phase 5 — Added Universal Connector Framework with credentials encryption (closed risk of database connection credentials exposure). |

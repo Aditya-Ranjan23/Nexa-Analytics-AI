@@ -44,6 +44,12 @@ class CustomUserCreationForm(UserCreationForm):
 class CustomLoginView(LoginView):
     template_name = "registration/login.html"
 
+    def get(self, request, *args, **kwargs):
+        from django.shortcuts import redirect
+        if request.user.is_authenticated:
+            return redirect("dashboard")
+        return redirect("/?auth=login")
+
     def post(self, request, *args, **kwargs):
         self.anon_session_key = request.session.session_key
         return super().post(request, *args, **kwargs)
@@ -69,17 +75,22 @@ class CustomLoginView(LoginView):
             
         return response
 
+
 def register(request):
+    from django.shortcuts import redirect
+    if request.user.is_authenticated:
+        return redirect("dashboard")
+
     if request.method == "POST":
         anon_session_key = request.session.session_key
         form = CustomUserCreationForm(request.POST)
         if form.is_valid():
             user = form.save()
             from .request_context import resolve_active_workspace
-            # Pre-provision default workspace
             dummy_req = type("Req", (), {"user": user})()
             workspace = resolve_active_workspace(dummy_req)
 
+            from django.contrib.auth import login as auth_login
             auth_login(request, user)
             
             if anon_session_key:
@@ -89,9 +100,8 @@ def register(request):
                 ).update(workspace=workspace, owner=user)
                 
             return redirect("dashboard")
-    else:
-        form = CustomUserCreationForm()
-    return render(request, "registration/register.html", {"form": form})
+    
+    return redirect("/?auth=register")
 
 
 @ensure_csrf_cookie
@@ -124,6 +134,46 @@ def analytics_summary(request):
         dataset_upload=state.active_upload,
         blueprint_override=state.blueprint_override,
     )
+    
+    if state.active_upload:
+        payload["dataset_id"] = state.active_upload.id
+        payload["dataset_name"] = state.active_upload.name or state.active_upload.display_name
+        payload["source_type"] = state.active_upload.source_type
+        payload["last_sync_at"] = state.active_upload.last_sync_at.isoformat() if state.active_upload.last_sync_at else None
+        payload["active_version_number"] = state.active_upload.active_version_number
+        payload["dataset_version"] = state.active_upload.active_version_number
+
+        active_ver = state.active_upload.versions.filter(
+            version_number=state.active_upload.active_version_number
+        ).first()
+        if active_ver:
+            if not active_ver.insights_cache:
+                from .dataset_pipeline import load_active_dataframe
+                from .intelligent_analytics import run_intelligent_analytics
+                df = load_active_dataframe(state.active_upload)
+                insights = run_intelligent_analytics(
+                    df,
+                    state.active_upload.name or state.active_upload.display_name,
+                    state.active_upload.source_type
+                )
+                active_ver.insights_cache = insights
+                active_ver.save(update_fields=["insights_cache"])
+            payload["proactive_insights"] = active_ver.insights_cache
+        else:
+            payload["proactive_insights"] = {}
+    else:
+        payload["dataset_id"] = None
+        payload["dataset_name"] = "Seed Dataset"
+        payload["source_type"] = "seed"
+        payload["last_sync_at"] = None
+        payload["active_version_number"] = 1
+        payload["dataset_version"] = 1
+
+        from .dataset_pipeline import load_active_dataframe
+        from .intelligent_analytics import run_intelligent_analytics
+        df = load_active_dataframe(None)
+        payload["proactive_insights"] = run_intelligent_analytics(df, "Seed Dataset", "seed")
+        
     return Response(payload, status=status.HTTP_200_OK)
 
 
@@ -550,7 +600,7 @@ def health_check(request):
 
     payload = {
         "status": "ok" if db_ok else "degraded",
-        "version": "0.4.0",
+        "version": "0.6.0",
         "checks": {
             "database": "ok" if db_ok else f"error: {db_error}",
         },
@@ -681,3 +731,264 @@ def delete_account(request):
     logout(request)
     user.delete()
     return Response({"deleted": True, "detail": "Account deleted successfully"}, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+def test_connector_connection(request):
+    host = request.data.get("host")
+    port = request.data.get("port", 5432)
+    username = request.data.get("username")
+    password = request.data.get("password", "")
+    database = request.data.get("database")
+
+    if not all([host, username, database]):
+        return Response({"error": "Host, username, and database name are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    from .crypto import encrypt_password
+    from .connector_pipeline import test_postgres_connection
+
+    config = {
+        "host": host,
+        "port": port,
+        "username": username,
+        "password": encrypt_password(password),
+        "database": database,
+    }
+
+    success, message = test_postgres_connection(config)
+    if success:
+        return Response({"success": True, "message": message}, status=status.HTTP_200_OK)
+    else:
+        return Response({"success": False, "message": message}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+def get_connector_schema(request):
+    host = request.data.get("host")
+    port = request.data.get("port", 5432)
+    username = request.data.get("username")
+    password = request.data.get("password", "")
+    database = request.data.get("database")
+
+    if not all([host, username, database]):
+        return Response({"error": "Host, username, and database name are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    from .crypto import encrypt_password
+    from .connector_pipeline import discover_postgres_tables
+
+    config = {
+        "host": host,
+        "port": port,
+        "username": username,
+        "password": encrypt_password(password),
+        "database": database,
+    }
+
+    try:
+        tables = discover_postgres_tables(config)
+        return Response({"tables": tables}, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+def ingest_connector_table(request):
+    host = request.data.get("host")
+    port = request.data.get("port", 5432)
+    username = request.data.get("username")
+    password = request.data.get("password", "")
+    database = request.data.get("database")
+    table = request.data.get("table")
+    name = request.data.get("name")
+
+    if not all([host, username, database, table, name]):
+        return Response({"error": "All fields, including database table and name, are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    from pathlib import Path
+    import re
+    import uuid
+    from django.conf import settings
+    from django.core.files.base import ContentFile
+    from django.core.files.storage import default_storage
+    from .crypto import encrypt_password
+    from .connector_pipeline import fetch_postgres_table_data
+    from .schema import validate_dataset_columns
+    from .upload_service import persist_dataset_activation
+
+    config = {
+        "host": host,
+        "port": port,
+        "username": username,
+        "password": encrypt_password(password),
+        "database": database,
+        "table": table,
+    }
+
+    try:
+        df = fetch_postgres_table_data(config, table)
+        is_valid, missing, _ = validate_dataset_columns(df.columns.tolist())
+        if not is_valid:
+            return Response({"error": f"Schema validation failed: missing columns {', '.join(missing)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        safe_name = re.sub(r"[^a-zA-Z0-9_]", "_", name)
+        csv_data = df.to_csv(index=False).encode("utf-8")
+        storage_name = default_storage.save(
+            f"datasets/{safe_name}_{uuid.uuid4().hex[:8]}.csv",
+            ContentFile(csv_data)
+        )
+        stored_file_path = Path(settings.MEDIA_ROOT) / storage_name
+        import_meta = {"format": "postgres", "table": table}
+
+        res = persist_dataset_activation(
+            request,
+            source_type="postgres",
+            stored_path=stored_file_path,
+            df=df,
+            import_meta=import_meta,
+            file_field=storage_name,
+            name=name,
+        )
+
+        dataset_id = res.get("upload_id")
+        if dataset_id:
+            dataset_upload = DatasetUpload.objects.get(id=dataset_id)
+            dataset_upload.connection_config = config
+            dataset_upload.save(update_fields=["connection_config"])
+
+        return Response(res, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+def sync_dataset(request, pk):
+    from .request_context import user_dataset_queryset
+    dataset = get_object_or_404(user_dataset_queryset(request), pk=pk)
+
+    from .connector_pipeline import sync_dataset_source
+    try:
+        res = sync_dataset_source(request, dataset)
+        return Response(res, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+def api_login(request):
+    from django.contrib.auth import authenticate, login as auth_login
+    username = request.data.get("username")
+    password = request.data.get("password")
+    remember_me = request.data.get("remember_me", False)
+
+    if not username or not password:
+        return Response({"error": "Username and password are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = authenticate(username=username, password=password)
+    if user is not None:
+        anon_session_key = request.session.session_key
+        auth_login(request, user)
+
+        if remember_me:
+            request.session.set_expiry(1209600)  # 2 weeks
+        else:
+            request.session.set_expiry(0)        # Browser close
+
+        # Claim anonymous datasets
+        if anon_session_key:
+            from .request_context import resolve_active_workspace
+            workspace = resolve_active_workspace(request)
+            DatasetUpload.objects.filter(
+                session_key=anon_session_key,
+                workspace__isnull=True
+            ).update(workspace=workspace, owner=user)
+
+        return Response({"success": True, "detail": "Logged in successfully."}, status=status.HTTP_200_OK)
+    else:
+        return Response({"error": "Invalid username or password."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+def api_register(request):
+    form = CustomUserCreationForm(request.data)
+    if form.is_valid():
+        anon_session_key = request.session.session_key
+        user = form.save()
+        
+        # Provision default workspace
+        from .request_context import resolve_active_workspace
+        dummy_req = type("Req", (), {"user": user})()
+        workspace = resolve_active_workspace(dummy_req)
+
+        from django.contrib.auth import login as auth_login
+        auth_login(request, user)
+
+        if anon_session_key:
+            DatasetUpload.objects.filter(
+                session_key=anon_session_key,
+                workspace__isnull=True
+            ).update(workspace=workspace, owner=user)
+
+        return Response({"success": True, "detail": "Registered successfully."}, status=status.HTTP_201_CREATED)
+    else:
+        errors = []
+        for field, errmsgs in form.errors.items():
+            for msg in errmsgs:
+                errors.append(f"{field.capitalize()}: {msg}")
+        err_str = " ".join(errors) or "Registration failed."
+        return Response({"error": err_str}, status=status.HTTP_400_BAD_REQUEST)
+
+
+def custom_logout(request):
+    from django.contrib.auth import logout
+    from django.shortcuts import redirect
+    logout(request)
+    return redirect("/")
+
+
+@api_view(["GET"])
+def compare_version_insights(request, pk):
+    from .request_context import user_dataset_queryset
+    dataset = get_object_or_404(user_dataset_queryset(request), pk=pk)
+    
+    v1_num = request.GET.get("v1")
+    v2_num = request.GET.get("v2")
+    if not v1_num or not v2_num:
+        return Response({"error": "Parameters v1 and v2 are required."}, status=status.HTTP_400_BAD_REQUEST)
+        
+    try:
+        v1 = dataset.versions.get(version_number=int(v1_num))
+        v2 = dataset.versions.get(version_number=int(v2_num))
+    except (ValueError, DatasetVersion.DoesNotExist):
+        return Response({"error": "One or both specified versions do not exist."}, status=status.HTTP_404_NOT_FOUND)
+
+    from .dataset_pipeline import load_active_dataframe
+    from .intelligent_analytics import run_intelligent_analytics
+    
+    # Version 1 cache
+    if not v1.insights_cache:
+        old_path = dataset.stored_path
+        dataset.stored_path = v1.stored_path
+        try:
+            df = load_active_dataframe(dataset)
+            v1.insights_cache = run_intelligent_analytics(df, dataset.name or dataset.display_name, v1.source_type)
+            v1.save(update_fields=["insights_cache"])
+        finally:
+            dataset.stored_path = old_path
+        
+    # Version 2 cache
+    if not v2.insights_cache:
+        old_path = dataset.stored_path
+        dataset.stored_path = v2.stored_path
+        try:
+            df = load_active_dataframe(dataset)
+            v2.insights_cache = run_intelligent_analytics(df, dataset.name or dataset.display_name, v2.source_type)
+            v2.save(update_fields=["insights_cache"])
+        finally:
+            dataset.stored_path = old_path
+
+    return Response({
+        "v1_number": v1.version_number,
+        "v2_number": v2.version_number,
+        "v1": v1.insights_cache,
+        "v2": v2.insights_cache
+    }, status=status.HTTP_200_OK)

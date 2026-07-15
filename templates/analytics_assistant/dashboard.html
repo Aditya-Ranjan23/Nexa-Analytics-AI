@@ -13,52 +13,89 @@
 <body>
     <div class="orb orb-one"></div>
     <div class="orb orb-two"></div>
-    <main class="container">
-        <header class="hero">
-            <p class="eyebrow">AI-Powered Analytics Assistant</p>
-            <h1>Nexa Insights Command Center</h1>
-            <p class="subtitle">
-                Monitor growth metrics and ask questions in plain language, powered by your NVIDIA model integration.
-            </p>
-            <div class="hero-meta">
-                <div class="dataset-badge" id="datasetBadge" hidden>
-                    <span class="badge-dot"></span>
-                    <span id="datasetBadgeText">No dataset</span>
-                </div>
+    <header class="saas-header">
+        <div class="saas-header-container">
+            <div class="saas-logo" onclick="switchTab('dashboard')">
+                <span class="logo-icon">📊</span>
+                <span class="saas-logo-text">Nexa<span class="logo-accent">Analytics</span></span>
             </div>
-        </header>
-
-        <div class="tabs-shell">
-            <nav class="tab-bar" role="tablist" aria-label="Main sections">
-                <button class="tab-link active" type="button" role="tab" aria-selected="true" aria-controls="tab-dashboard" data-tab="dashboard" id="tab-btn-dashboard">
-                    Dashboard
-                </button>
-                <button class="tab-link" type="button" role="tab" aria-selected="false" aria-controls="tab-data" data-tab="data" id="tab-btn-data">
-                    Datasets
-                </button>
-                <button class="tab-link" type="button" role="tab" aria-selected="false" aria-controls="tab-insights" data-tab="insights" id="tab-btn-insights">
-                    AI Insights
-                </button>
-                <button class="tab-link" type="button" role="tab" aria-selected="false" aria-controls="tab-assistant" data-tab="assistant" id="tab-btn-assistant">
-                    Ask AI
-                </button>
+            
+            <nav class="saas-saas-nav">
+                <button class="tab-link active" type="button" role="tab" aria-selected="true" aria-controls="tab-dashboard" data-tab="dashboard" id="tab-btn-dashboard">Dashboard</button>
+                <button class="tab-link" type="button" role="tab" aria-selected="false" aria-controls="tab-data" data-tab="data" id="tab-btn-data">Datasets</button>
+                <button class="tab-link" type="button" role="tab" aria-selected="false" aria-controls="tab-insights" data-tab="insights" id="tab-btn-insights">Insights</button>
+                <button class="tab-link" type="button" role="tab" aria-selected="false" aria-controls="tab-assistant" data-tab="assistant" id="tab-btn-assistant">Ask AI</button>
                 {% if request.user.is_authenticated %}
-                <button class="tab-link" type="button" role="tab" aria-selected="false" aria-controls="tab-profile" data-tab="profile" id="tab-btn-profile">
-                    Profile
-                </button>
-                <button class="tab-link" type="button" role="tab" aria-selected="false" aria-controls="tab-settings" data-tab="settings" id="tab-btn-settings">
-                    Settings
-                </button>
-                <a href="{% url 'logout' %}" class="tab-link-action logout-link">
-                    Logout
-                </a>
-                {% else %}
-                <a href="{% url 'login' %}" class="tab-link-action login-link">
-                    Login / Register
-                </a>
+                <button class="tab-link" type="button" role="tab" aria-selected="false" aria-controls="tab-profile" data-tab="profile" id="tab-btn-profile">Profile</button>
+                <button class="tab-link" type="button" role="tab" aria-selected="false" aria-controls="tab-settings" data-tab="settings" id="tab-btn-settings">Settings</button>
                 {% endif %}
             </nav>
+            
+            <div class="saas-header-right">
+                {% if request.user.is_authenticated %}
+                <div class="workspace-pill">
+                    <span class="pill-label">Workspace:</span>
+                    <strong id="activeWorkspaceName">{{ active_workspace.name }}</strong>
+                </div>
+                <div class="header-avatar-pill" title="Logged in as {{ request.user.username }}" onclick="switchTab('profile')">
+                    {% if request.user.profile.avatar %}
+                    <img src="{{ request.user.profile.avatar.url }}" alt="Avatar" class="header-avatar" id="headerAvatarImage" />
+                    {% else %}
+                    <div class="header-avatar-placeholder" id="headerAvatarPlaceholder">{{ request.user.username|slice:":2"|upper }}</div>
+                    {% endif %}
+                </div>
+                <a href="{% url 'logout' %}" class="saas-logout-btn">Logout</a>
+                {% else %}
+                <button class="saas-btn-text" type="button" id="openLoginBtn">Sign In</button>
+                <button class="saas-btn-primary" type="button" id="openRegisterBtn">Get Started</button>
+                {% endif %}
+            </div>
+        </div>
+    </header>
 
+    <main class="container">
+        <!-- SaaS Hero Section -->
+        <section class="saas-hero-section">
+            <div class="hero-content">
+                {% if request.user.is_authenticated %}
+                <div class="hero-workspace-badge">
+                    <span class="badge-icon">💼</span>
+                    <span>Workspace: <strong>{{ active_workspace.name }}</strong></span>
+                </div>
+                {% endif %}
+                
+                <h1 class="hero-title">
+                    Turn Raw Business Data into <span class="highlight-text">Conversational Insights</span>
+                </h1>
+                
+                <p class="hero-subtitle">
+                    Nexa Analytics connects directly to your databases and spreadsheets, allowing you to build dashboards, track KPIs, and query metrics in plain English.
+                </p>
+                
+                <div class="hero-dataset-summary" id="heroDatasetSummary">
+                    <div class="dataset-badge-pulse" id="heroActiveBadge" hidden>
+                        <span class="pulse-dot"></span>
+                        <span id="heroActiveText">Loading active dataset...</span>
+                    </div>
+                </div>
+                
+                <div class="hero-actions">
+                    <button type="button" class="saas-btn-primary large-btn" id="heroPrimaryCta" onclick="switchTab('data')">
+                        Connect Data Source
+                    </button>
+                    <button type="button" class="saas-btn-secondary large-btn" id="heroSecondaryCta" onclick="switchTab('assistant')">
+                        Ask AI Assistant
+                    </button>
+                    {% if not request.user.is_authenticated %}
+                    <button type="button" class="saas-btn-text" id="heroPrimaryCtaRegister" style="font-size: 0.85rem; color: var(--muted);">
+                        Create free account to save your work
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+
+        <div class="tabs-shell">
             <div class="tab-panels">
             <!-- Dashboard -->
             <section class="tab-panel active" id="tab-dashboard" role="tabpanel" aria-labelledby="tab-btn-dashboard">
@@ -110,33 +147,128 @@
 
                 <div class="data-layout">
                     <div class="data-main">
-                        <article class="panel upload-card">
+                        <!-- Connector Library Selector -->
+                        <article class="panel connector-selector-card">
                             <div class="panel-head">
-                                <h3>File Upload</h3>
-                                <span class="panel-note">CSV, XLSX, XLS</span>
+                                <h3>Connector Library</h3>
+                                <span class="panel-note">Choose a data source</span>
                             </div>
-                            <form id="uploadForm">
-                                <label class="dropzone" id="dropzone" for="datasetFile">
-                                    <input id="datasetFile" type="file" accept=".csv,.xlsx,.xls" hidden />
-                                    <span class="dropzone-icon" aria-hidden="true">⬆</span>
-                                    <span class="dropzone-title">Drag & drop your dataset here</span>
-                                    <span class="dropzone-hint">or click to browse files</span>
-                                    <span class="dropzone-file" id="selectedFileName">No file selected</span>
-                                </label>
-                                <button class="primary-btn full-width" type="submit" id="uploadSubmitBtn">Upload Dataset</button>
-                            </form>
+                            <div class="connector-options-grid">
+                                <button type="button" class="connector-option-btn active" id="connector-opt-file" data-connector="file">
+                                    <span class="connector-icon">📄</span>
+                                    <strong>File Upload</strong>
+                                    <span class="connector-meta">CSV, Excel (.xlsx, .xls)</span>
+                                </button>
+                                <button type="button" class="connector-option-btn" id="connector-opt-url" data-connector="url">
+                                    <span class="connector-icon">🔗</span>
+                                    <strong>URL Link</strong>
+                                    <span class="connector-meta">Remote public file</span>
+                                </button>
+                                <button type="button" class="connector-option-btn" id="connector-opt-postgres" data-connector="postgres">
+                                    <span class="connector-icon">🐘</span>
+                                    <strong>PostgreSQL</strong>
+                                    <span class="connector-meta">Secure database connection</span>
+                                </button>
+                                <button type="button" class="connector-option-btn disabled" disabled>
+                                    <span class="connector-icon">❄️</span>
+                                    <strong>Snowflake</strong>
+                                    <span class="connector-meta">Coming soon</span>
+                                </button>
+                                <button type="button" class="connector-option-btn disabled" disabled>
+                                    <span class="connector-icon">☁️</span>
+                                    <strong>BigQuery</strong>
+                                    <span class="connector-meta">Coming soon</span>
+                                </button>
+                            </div>
                         </article>
 
-                        <article class="panel upload-card">
-                            <div class="panel-head">
-                                <h3>URL Ingestion</h3>
-                                <span class="panel-note">Remote CSV or Excel</span>
+                        <!-- Connector Form Container -->
+                        <article class="panel connector-form-card" id="connectorFormCard">
+                            <!-- File Form -->
+                            <div class="connector-form-pane" id="pane-file">
+                                <div class="panel-head" style="padding-left:0; padding-right:0;">
+                                    <h3>File Ingestion</h3>
+                                    <span class="panel-note">CSV or Excel</span>
+                                </div>
+                                <form id="uploadForm">
+                                    <label class="dropzone" id="dropzone" for="datasetFile">
+                                        <input id="datasetFile" type="file" accept=".csv,.xlsx,.xls" hidden />
+                                        <span class="dropzone-icon" aria-hidden="true">⬆</span>
+                                        <span class="dropzone-title">Drag & drop your dataset here</span>
+                                        <span class="dropzone-hint">or click to browse files</span>
+                                        <span class="dropzone-file" id="selectedFileName">No file selected</span>
+                                    </label>
+                                    <button class="primary-btn full-width" type="submit" id="uploadSubmitBtn">Upload Dataset</button>
+                                </form>
                             </div>
-                            <form id="urlForm" class="url-form">
-                                <label for="datasetUrl">Public dataset link</label>
-                                <input id="datasetUrl" type="url" placeholder="https://example.com/data.csv" />
-                                <button class="primary-btn full-width" type="submit">Ingest From Link</button>
-                            </form>
+
+                            <!-- URL Form -->
+                            <div class="connector-form-pane" id="pane-url" hidden>
+                                <div class="panel-head" style="padding-left:0; padding-right:0;">
+                                    <h3>URL Ingestion</h3>
+                                    <span class="panel-note">Remote CSV or Excel</span>
+                                </div>
+                                <form id="urlForm" class="url-form">
+                                    <label for="datasetUrl">Public dataset link</label>
+                                    <input id="datasetUrl" type="url" placeholder="https://example.com/data.csv" />
+                                    <button class="primary-btn full-width" type="submit">Ingest From Link</button>
+                                </form>
+                            </div>
+
+                            <!-- PostgreSQL Form -->
+                            <div class="connector-form-pane" id="pane-postgres" hidden>
+                                <div class="panel-head" style="padding-left:0; padding-right:0;">
+                                    <h3>PostgreSQL Connection</h3>
+                                    <span class="panel-note">Connect to external database</span>
+                                </div>
+                                <form id="postgresForm" class="postgres-form" novalidate>
+                                    <div class="form-row-2">
+                                        <div class="form-group">
+                                            <label for="pgHost">Host</label>
+                                            <input type="text" id="pgHost" placeholder="e.g. localhost or database.net" required />
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="pgPort">Port</label>
+                                            <input type="number" id="pgPort" value="5432" placeholder="5432" required />
+                                        </div>
+                                    </div>
+                                    <div class="form-row-2" style="margin-top:0.75rem;">
+                                        <div class="form-group">
+                                            <label for="pgUser">Username</label>
+                                            <input type="text" id="pgUser" placeholder="Username" required />
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="pgPassword">Password</label>
+                                            <input type="password" id="pgPassword" placeholder="••••••••" required />
+                                        </div>
+                                    </div>
+                                    <div class="form-group" style="margin-top:0.75rem;">
+                                        <label for="pgDatabase">Database Name</label>
+                                        <input type="text" id="pgDatabase" placeholder="e.g. sales_db" required />
+                                    </div>
+
+                                    <div class="postgres-action-row" style="margin-top:1.25rem; display:flex; gap:0.75rem;">
+                                        <button type="button" class="ghost-btn" id="pgTestBtn" style="flex:1;">Test Connection</button>
+                                        <button type="button" class="primary-btn" id="pgListTablesBtn" style="flex:1;" disabled>List Tables</button>
+                                    </div>
+
+                                    <!-- Table Selector & Ingest Name -->
+                                    <div id="pgIngestSection" style="margin-top:1.5rem; padding-top:1.25rem; border-top:1px solid rgba(255,255,255,0.08);" hidden>
+                                        <div class="form-group">
+                                            <label for="pgTableSelect">Database Table</label>
+                                            <select id="pgTableSelect">
+                                                <!-- Populated dynamically -->
+                                            </select>
+                                        </div>
+                                        <div class="form-group" style="margin-top:0.75rem;">
+                                            <label for="pgDatasetName">Dataset Name</label>
+                                            <input type="text" id="pgDatasetName" placeholder="e.g. Q3 Sales Data" />
+                                        </div>
+                                        <button type="submit" class="primary-btn full-width" style="margin-top:1.25rem;">Connect & Ingest Table</button>
+                                    </div>
+                                    <div id="postgresStatus" class="status-banner" style="margin-top:1rem;" hidden></div>
+                                </form>
+                            </div>
                         </article>
 
                         <article class="panel status-card">
@@ -187,28 +319,146 @@
                 </div>
             </section>
 
-            <!-- AI Insights -->
+            <!-- Proactive Insights Dashboard -->
             <section class="tab-panel" id="tab-insights" role="tabpanel" aria-labelledby="tab-btn-insights">
                 <div class="section-head">
                     <div>
-                        <h2 class="section-title">AI Insights</h2>
-                        <p class="section-desc">Narrative summary and auto-detected signals from your data.</p>
+                        <h2 class="section-title">Proactive Business Analyst</h2>
+                        <p class="section-desc">Automated, statistical alerts and AI narrative briefings on your active data.</p>
                     </div>
-                    <button type="button" class="ghost-btn" id="refreshInsightsBtn">Regenerate View</button>
+                    <div class="insights-head-actions" style="display: flex; gap: 0.75rem; align-items: center;">
+                        <div class="insight-timeline" id="insightTimelineContainer" style="display: flex; gap: 0.35rem; align-items: center;">
+                            <span class="timeline-label" style="font-size: 0.78rem; color: var(--muted); margin-right: 0.25rem;">Timeline:</span>
+                            <select id="insightsVersionSelect" class="small-select" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); color: var(--text); border-radius: 6px; padding: 0.25rem 0.5rem; font-size: 0.78rem; cursor: pointer; outline: none;"></select>
+                            <button type="button" class="saas-btn-secondary small" style="padding: 0.3rem 0.6rem; font-size: 0.76rem;" id="compareTimelineInsightsBtn">Compare Version</button>
+                        </div>
+                        <button type="button" class="saas-btn-secondary small" style="padding: 0.3rem 0.6rem; font-size: 0.76rem;" id="refreshInsightsBtn">Refresh Analysis</button>
+                    </div>
                 </div>
 
-                <article class="panel summary-hero" id="summaryHero">
-                    <div class="summary-hero-head">
-                        <span class="summary-label">Executive Summary</span>
-                        <span class="summary-tag" id="insightsModeTag">—</span>
+                <!-- Version Insights Comparison Panel -->
+                <div id="insightComparisonBox" class="panel" style="background: rgba(15, 23, 42, 0.95); border: 1px solid var(--accent); margin-top: 1rem; padding: 1.25rem; border-radius: 12px;" hidden>
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
+                        <h3 style="margin: 0; color: var(--accent); font-size: 1.1rem;">Version Insights Comparison</h3>
+                        <button type="button" class="saas-btn-secondary small" id="closeInsightCompareBtn" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;">Close Comparison</button>
                     </div>
-                    <div id="aiSummary" class="ai-summary"></div>
-                    <p class="empty-state" id="summaryEmpty" hidden>Upload a dataset to generate an AI-powered executive summary.</p>
-                </article>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+                        <div style="background: rgba(255, 255, 255, 0.02); padding: 0.85rem; border-radius: 8px;">
+                            <h4 id="compV1Title" style="margin: 0 0 0.5rem; color: var(--text); font-size: 0.95rem;">Version A</h4>
+                            <p id="compV1Text" style="font-size: 0.86rem; color: var(--muted); line-height: 1.5; margin: 0;"></p>
+                        </div>
+                        <div style="background: rgba(255, 255, 255, 0.02); padding: 0.85rem; border-radius: 8px;">
+                            <h4 id="compV2Title" style="margin: 0 0 0.5rem; color: var(--text); font-size: 0.95rem;">Version B</h4>
+                            <p id="compV2Text" style="font-size: 0.86rem; color: var(--muted); line-height: 1.5; margin: 0;"></p>
+                        </div>
+                    </div>
+                </div>
 
-                <div class="insights-section-label">Detected Signals</div>
-                <div id="insightsList" class="insights-list"></div>
-                <p class="empty-state centered" id="insightsEmpty" hidden>No insight cards yet. Upload data or switch to a dataset with more columns.</p>
+                <!-- Proactive Top KPIs Row -->
+                <div class="insights-kpi-row" id="insightsKpiRow" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-top: 1rem; margin-bottom: 1.25rem;">
+                    <!-- Dynamically populated mini KPI cards -->
+                </div>
+
+                <!-- Narrative Cards Grid -->
+                <div class="narratives-grid">
+                    <article class="panel narrative-card primary-brief">
+                        <div class="panel-head">
+                            <h3>Executive Briefing</h3>
+                            <span class="badge-dot" style="background: var(--accent);"></span>
+                        </div>
+                        <p id="narrativeExec" class="narrative-text">Loading summary...</p>
+                    </article>
+                    <div class="narratives-sub-grid">
+                        <article class="panel narrative-card">
+                            <div class="panel-head">
+                                <h3>Management Focus</h3>
+                            </div>
+                            <p id="narrativeMgt" class="narrative-text">—</p>
+                        </article>
+                        <article class="panel narrative-card">
+                            <div class="panel-head">
+                                <h3>Operational Status</h3>
+                            </div>
+                            <p id="narrativeOps" class="narrative-text">—</p>
+                        </article>
+                        <article class="panel narrative-card risk-card">
+                            <div class="panel-head">
+                                <h3>Data Quality & Risk Alerts</h3>
+                            </div>
+                            <p id="narrativeRisk" class="narrative-text">—</p>
+                        </article>
+                        <article class="panel narrative-card opportunity-card">
+                            <div class="panel-head">
+                                <h3>Growth Opportunities</h3>
+                            </div>
+                            <p id="narrativeOpp" class="narrative-text">—</p>
+                        </article>
+                    </div>
+                </div>
+
+                <!-- Two-Column Insights & Actionables -->
+                <div class="insights-body-layout" style="display: grid; grid-template-columns: 3.5fr 2.5fr; gap: 1.25rem; margin-top: 1.25rem;">
+                    <!-- Column 1: Anomalies and Statistical Drilldowns -->
+                    <div class="insights-col-left" style="display: flex; flex-direction: column; gap: 1.25rem;">
+                        <article class="panel anomalies-panel">
+                            <div class="panel-head">
+                                <h3>Detected Anomalies & Outliers</h3>
+                                <span class="insights-mode-badge" id="insightsModeTag">—</span>
+                            </div>
+                            <div id="anomaliesList" class="anomalies-list-container">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </article>
+
+                        <article class="panel attribution-panel">
+                            <div class="panel-head">
+                                <h3>Root Cause & Attribution</h3>
+                            </div>
+                            <div id="attributionList" class="attribution-list-container">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </article>
+
+                        <article class="panel data-quality-panel">
+                            <div class="panel-head">
+                                <h3>Data Quality & Health Summary</h3>
+                            </div>
+                            <div id="dataQualitySummary" class="data-quality-container" style="display: flex; flex-direction: column; gap: 0.8rem;">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </article>
+                    </div>
+
+                    <!-- Column 2: Actionable Recommendations & Suggestions -->
+                    <div class="insights-col-right" style="display: flex; flex-direction: column; gap: 1.25rem;">
+                        <article class="panel recommendations-panel">
+                            <div class="panel-head">
+                                <h3>Recommended Business Actions</h3>
+                            </div>
+                            <ul id="recommendationsList" class="recommendations-list" style="margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.6rem;">
+                                <!-- Populated dynamically -->
+                            </ul>
+                        </article>
+
+                        <article class="panel shifts-panel">
+                            <div class="panel-head">
+                                <h3>Business Highlights & Shifts</h3>
+                            </div>
+                            <ul id="shiftsHighlightList" class="shifts-list" style="margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.6rem; color: var(--muted); font-size: 0.88rem;">
+                                <!-- Populated dynamically -->
+                            </ul>
+                        </article>
+
+                        <article class="panel suggested-questions-panel">
+                            <div class="panel-head">
+                                <h3>Ask Proactive Questions</h3>
+                            </div>
+                            <div id="suggestedQuestionsList" class="suggested-questions-list" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </article>
+                    </div>
+                </div>
             </section>
 
             <!-- Ask AI -->
@@ -493,6 +743,73 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Unified Authentication Modal -->
+    <div class="saas-modal-backdrop" id="authModal" hidden>
+        <div class="saas-modal-content glassmorphism">
+            <button type="button" class="modal-close-btn" id="closeAuthModalBtn" title="Close modal">&times;</button>
+            
+            <div class="auth-tabs">
+                <button type="button" class="auth-tab-btn active" id="tabBtnLogin">Sign In</button>
+                <button type="button" class="auth-tab-btn" id="tabBtnRegister">Create Account</button>
+            </div>
+            
+            <!-- Sign In Form -->
+            <form id="modalLoginForm" class="auth-form-pane">
+                <div id="loginFormError" class="status-banner error" hidden></div>
+                <div class="form-group">
+                    <label for="loginUsername">Username</label>
+                    <input type="text" id="loginUsername" required autocomplete="username" />
+                </div>
+                <div class="form-group" style="margin-top: 0.75rem;">
+                    <label for="loginPassword">Password</label>
+                    <div class="password-input-wrapper">
+                        <input type="password" id="loginPassword" required autocomplete="current-password" />
+                        <button type="button" class="toggle-password-visibility" title="Toggle password visibility">👁️</button>
+                    </div>
+                </div>
+                
+                <div class="form-row-space" style="margin-top: 1rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem;">
+                    <label class="checkbox-label" style="display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; color: var(--muted);">
+                        <input type="checkbox" id="loginRememberMe" style="width: auto; margin: 0;" />
+                        <span>Remember Me</span>
+                    </label>
+                    <a href="{% url 'password_reset' %}" class="forgot-password-link" target="_blank" style="color: var(--accent); text-decoration: none;">Forgot Password?</a>
+                </div>
+                
+                <button type="submit" class="saas-btn-primary full-width" style="margin-top: 1.5rem;" id="loginSubmitBtn">Sign In</button>
+            </form>
+            
+            <!-- Register Form -->
+            <form id="modalRegisterForm" class="auth-form-pane" hidden>
+                <div id="registerFormError" class="status-banner error" hidden></div>
+                <div class="form-group">
+                    <label for="registerUsername">Username</label>
+                    <input type="text" id="registerUsername" name="username" required autocomplete="username" />
+                </div>
+                <div class="form-group" style="margin-top: 0.75rem;">
+                    <label for="registerEmail">Email Address</label>
+                    <input type="email" id="registerEmail" name="email" required autocomplete="email" />
+                </div>
+                <div class="form-group" style="margin-top: 0.75rem;">
+                    <label for="registerPassword1">Password</label>
+                    <div class="password-input-wrapper">
+                        <input type="password" id="registerPassword1" name="password1" required autocomplete="new-password" />
+                        <button type="button" class="toggle-password-visibility" title="Toggle password visibility">👁️</button>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-top: 0.75rem;">
+                    <label for="registerPassword2">Confirm Password</label>
+                    <div class="password-input-wrapper">
+                        <input type="password" id="registerPassword2" name="password2" required autocomplete="new-password" />
+                        <button type="button" class="toggle-password-visibility" title="Toggle password visibility">👁️</button>
+                    </div>
+                </div>
+                
+                <button type="submit" class="saas-btn-primary full-width" style="margin-top: 1.5rem;" id="registerSubmitBtn">Create Account</button>
+            </form>
         </div>
     </div>
 

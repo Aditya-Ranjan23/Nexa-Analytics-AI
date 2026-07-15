@@ -1,8 +1,8 @@
-# Nexa Analytics AI Assistant — Architecture (Phase 1 RC)
+# Nexa Analytics AI Assistant — Architecture (v0.6.0)
 
-**Version:** Phase 1 Release Candidate  
-**Stack:** Django 6 · DRF · Pandas · SQLite · Chart.js · NVIDIA API  
-**Last updated:** 2026-07-13
+**Version:** v0.6.0 – Universal Connector Framework  
+**Stack:** Django 6 · DRF · Pandas · SQLite · Chart.js · NVIDIA API · Cryptography  
+**Last updated:** 2026-07-15
 
 ---
 
@@ -160,6 +160,16 @@ Every user starts with exactly one workspace, acting as the root-level container
 - **Isolated Scoping**: All `DatasetUpload`, `DashboardState`, and `ChatSession` instances belong to a `Workspace` ForeignKey. Scoping is enforced at request context level via `resolve_active_workspace()` and `ownership_filter_kwargs()`.
 - **Backward-Compatible Migration**: All existing user data is backfilled into auto-generated default user workspaces.
 - **Anonymous Session Behavior**: Anonymous users continue using browser session keys without being tied to workspaces.
+
+---
+
+## 4.3 Universal Connector Framework (ADR-025)
+
+The connector layer connects external databases (PostgreSQL) directly to the Nexa ingestion and versioning pipeline:
+
+- **Reusable Model Scoping**: Database connections do not use a separate model. Instead, `DatasetUpload` is extended with a `connection_config` JSONField containing host, username, database, and port parameters.
+- **Symmetric Encryption**: Passwords stored inside `connection_config` are encrypted using AES-256 (Fernet) backed by a 32-byte key derived from `settings.SECRET_KEY`. Decryption is performed strictly in-memory during sync or test connection calls.
+- **Dynamic Ingestion & Sync**: Refreshing a dataset connects to the database via `psycopg`, runs cursor queries, compares column schema lists with previous versions, auto-increments versioning count, and writes the snapshot to a new `DatasetVersion` record.
 
 ---
 

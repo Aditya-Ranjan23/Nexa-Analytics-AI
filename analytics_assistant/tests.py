@@ -438,7 +438,7 @@ class HealthCheckTests(TestCase):
         response = self.client.get("/health/")
         data = response.json()
         self.assertIn("version", data)
-        self.assertEqual(data["version"], "0.4.0")
+        self.assertEqual(data["version"], "0.6.0")
 
     def test_health_check_includes_database_check(self):
         response = self.client.get("/health/")
@@ -1023,6 +1023,297 @@ class UserProfileAndSettingsTests(TestCase):
         from django.contrib.auth import get_user_model
         User = get_user_model()
         self.assertFalse(User.objects.filter(username="settingsuser").exists())
+
+
+from unittest.mock import MagicMock, patch
+from analytics_assistant.crypto import encrypt_password, decrypt_password
+
+class CryptographyTests(TestCase):
+    def test_encrypt_decrypt(self):
+        plain = "SuperSecretDbPassword123!"
+        enc = encrypt_password(plain)
+        self.assertNotEqual(plain, enc)
+        self.assertEqual(plain, decrypt_password(enc))
+
+
+class ConnectorPipelineTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        self.user = User.objects.create_user(username="dbuser", password="StrongPass123_!")
+        from analytics_assistant.request_context import resolve_active_workspace
+        dummy_req = type("Req", (), {"user": self.user})()
+        self.workspace = resolve_active_workspace(dummy_req)
+
+    @patch("analytics_assistant.connector_pipeline.psycopg.connect")
+    def test_test_postgres_connection_success(self, mock_connect):
+        from analytics_assistant.connector_pipeline import test_postgres_connection
+        mock_conn = MagicMock()
+        mock_connect.return_value = mock_conn
+
+        config = {
+            "host": "localhost",
+            "port": 5432,
+            "username": "postgres",
+            "password": encrypt_password("pass"),
+            "database": "testdb",
+        }
+        success, msg = test_postgres_connection(config)
+        self.assertTrue(success)
+        mock_connect.assert_called_once()
+        mock_conn.close.assert_called_once()
+
+    @patch("analytics_assistant.connector_pipeline.psycopg.connect")
+    def test_discover_postgres_tables(self, mock_connect):
+        from analytics_assistant.connector_pipeline import discover_postgres_tables
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_cur.fetchall.return_value = [("users",), ("sales_data",)]
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+        mock_connect.return_value = mock_conn
+
+        config = {
+            "host": "localhost",
+            "port": 5432,
+            "username": "postgres",
+            "password": encrypt_password("pass"),
+            "database": "testdb",
+        }
+        tables = discover_postgres_tables(config)
+        self.assertEqual(tables, ["users", "sales_data"])
+
+    @patch("analytics_assistant.connector_pipeline.psycopg.connect")
+    def test_fetch_postgres_table_data(self, mock_connect):
+        from analytics_assistant.connector_pipeline import fetch_postgres_table_data
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_cur.description = [("date",), ("revenue",), ("orders",), ("ad_spend",), ("conversion_rate",), ("channel",)]
+        mock_cur.fetchall.return_value = [
+            ("2026-01-01", 100.0, 5, 20.0, 0.05, "google"),
+            ("2026-01-02", 200.0, 10, 40.0, 0.06, "facebook"),
+        ]
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+        mock_connect.return_value = mock_conn
+
+        config = {
+            "host": "localhost",
+            "port": 5432,
+            "username": "postgres",
+            "password": encrypt_password("pass"),
+            "database": "testdb",
+        }
+        df = fetch_postgres_table_data(config, "sales_data")
+        self.assertEqual(df.shape, (2, 6))
+        self.assertEqual(list(df.columns), ["date", "revenue", "orders", "ad_spend", "conversion_rate", "channel"])
+
+    @patch("analytics_assistant.connector_pipeline.psycopg.connect")
+    def test_sync_dataset_postgres_increments_version(self, mock_connect):
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_cur.description = [("date",), ("revenue",), ("orders",), ("ad_spend",), ("conversion_rate",), ("channel",)]
+        mock_cur.fetchall.return_value = [
+            ("2026-01-01", 100.0, 5, 20.0, 0.05, "google"),
+            ("2026-01-02", 200.0, 10, 40.0, 0.06, "facebook"),
+        ]
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+        mock_connect.return_value = mock_conn
+
+        dataset = DatasetUpload.objects.create(
+            workspace=self.workspace,
+            owner=self.user,
+            name="Db Sync Dataset",
+            source_type="postgres",
+            connection_config={
+                "host": "localhost",
+                "port": 5432,
+                "username": "postgres",
+                "password": encrypt_password("pass"),
+                "database": "testdb",
+                "table": "sales_data",
+            },
+            active_version_number=1,
+            status="processed"
+        )
+        DatasetVersion.objects.create(
+            dataset=dataset,
+            version_number=1,
+            source_type="postgres",
+            row_count=2,
+        )
+
+        dummy_req = type("Req", (), {"user": self.user})()
+        from analytics_assistant.connector_pipeline import sync_dataset_source
+        res = sync_dataset_source(dummy_req, dataset)
+
+        self.assertEqual(res["version_number"], 2)
+        dataset.refresh_from_db()
+        self.assertEqual(dataset.active_version_number, 2)
+        self.assertEqual(dataset.versions.count(), 2)
+
+
+class AjaxAuthenticationTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        self.user = User.objects.create_user(username="ajaxuser", password="StrongPassword123_!")
+
+    def test_api_login_success(self):
+        response = self.client.post(
+            "/api/auth/login/",
+            {"username": "ajaxuser", "password": "StrongPassword123_!", "remember_me": True},
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["success"])
+        # Verify user is logged in
+        self.assertTrue(int(self.client.session["_auth_user_id"]) == self.user.id)
+        # Expiry is set (2 weeks)
+        self.assertEqual(self.client.session.get_expiry_age(), 1209600)
+
+    def test_api_login_invalid_credentials(self):
+        response = self.client.post(
+            "/api/auth/login/",
+            {"username": "ajaxuser", "password": "WrongPassword!"},
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertIn("error", data)
+        self.assertEqual(data["error"], "Invalid username or password.")
+
+    def test_api_register_success(self):
+        response = self.client.post(
+            "/api/auth/register/",
+            {
+                "username": "ajaxnewuser",
+                "email": "ajaxnewuser@example.com",
+                "password1": "NewStrongPass123_!",
+                "password2": "NewStrongPass123_!",
+            },
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertTrue(data["success"])
+
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        new_user = User.objects.get(username="ajaxnewuser")
+        self.assertEqual(new_user.email, "ajaxnewuser@example.com")
+        self.assertEqual(new_user.workspaces.count(), 1)
+        self.assertIsNotNone(new_user.profile)
+
+    def test_api_register_validation_errors(self):
+        response = self.client.post(
+            "/api/auth/register/",
+            {
+                "username": "ajaxuser",  # Already exists
+                "email": "invalidemail",
+                "password1": "short",
+                "password2": "mismatch",
+            },
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertIn("error", data)
+
+
+class IntelligentAnalyticsTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        self.user = User.objects.create_user(username="analyst_user", password="StrongPassword123_!")
+        self.client.force_login(self.user)
+        
+        # Create active workspace and user profile
+        from analytics_assistant.models import Workspace, DatasetUpload, DatasetVersion
+        self.workspace = Workspace.objects.create(name="analyst_user's Workspace", owner=self.user)
+
+        self.dataset = DatasetUpload.objects.create(
+            name="Anomaly Data",
+            owner=self.user,
+            workspace=self.workspace,
+            source_type="file",
+            row_count=10,
+        )
+        self.version = DatasetVersion.objects.create(
+            dataset=self.dataset,
+            version_number=1,
+            source_type="file",
+            row_count=10,
+        )
+        self.version2 = DatasetVersion.objects.create(
+            dataset=self.dataset,
+            version_number=2,
+            source_type="file",
+            row_count=10,
+        )
+
+    def test_run_intelligent_analytics_calculations(self):
+        import pandas as pd
+        from analytics_assistant.intelligent_analytics import run_intelligent_analytics
+        
+        # Build 15 points to prevent outlier masking
+        df = pd.DataFrame({
+            "date": pd.date_range("2026-07-01", periods=15),
+            "revenue": [100.0, 102.0, 98.0, 101.0, 100.0, 99.0, 9999.0, 101.0, 100.0, 99.0, 100.0, 102.0, 98.0, 101.0, 100.0],
+            "channel": ["Meta"] * 15
+        })
+        
+        res = run_intelligent_analytics(df, "Test Table", "file")
+        
+        self.assertIn("anomalies", res)
+        self.assertIn("trends", res)
+        self.assertIn("contributors", res)
+        self.assertIn("narratives", res)
+        
+        anom_types = [a["type"] for a in res["anomalies"]]
+        self.assertIn("outliers", anom_types)
+
+    def test_insights_caching_on_version(self):
+        self.assertEqual(self.version.insights_cache, {})
+        
+        import pandas as pd
+        from unittest.mock import patch
+        
+        df = pd.DataFrame({
+            "date": pd.date_range("2026-07-01", periods=5),
+            "revenue": [10.0, 12.0, 11.0, 14.0, 15.0],
+            "channel": ["A", "B", "A", "B", "A"]
+        })
+        
+        with patch("analytics_assistant.views.resolve_dashboard_state") as mock_state:
+            mock_state.return_value = type("State", (), {
+                "active_upload": self.dataset,
+                "blueprint_override": None
+            })
+            with patch("analytics_assistant.dataset_pipeline.load_active_dataframe", return_value=df):
+                response = self.client.get("/api/analytics/summary/")
+                self.assertEqual(response.status_code, 200)
+                data = response.json()
+                self.assertIn("proactive_insights", data)
+                
+                self.version.refresh_from_db()
+                self.assertIsNotNone(self.version.insights_cache)
+                self.assertEqual(self.version.insights_cache["confidence_score"], 1.0)
+
+    def test_compare_version_insights_view(self):
+        self.version.insights_cache = {"narratives": {"executive_summary": "Version 1 Summary"}}
+        self.version.save()
+        self.version2.insights_cache = {"narratives": {"executive_summary": "Version 2 Summary"}}
+        self.version2.save()
+        
+        response = self.client.get(
+            f"/api/data/datasets/{self.dataset.pk}/versions/compare_insights/?v1=1&v2=2"
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["v1"]["narratives"]["executive_summary"], "Version 1 Summary")
+        self.assertEqual(data["v2"]["narratives"]["executive_summary"], "Version 2 Summary")
+
+
 
 
 

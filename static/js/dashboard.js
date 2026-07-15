@@ -38,6 +38,9 @@ const libraryList = document.getElementById("libraryList");
 const chartInstances = new Map();
 let sessionId = null;
 let chatWelcomed = false;
+let activeDatasetId = null;
+let activeDatasetSource = null;
+let activeDatasetVersion = 1;
 
 // Versioning and Modal DOM Elements
 let activeModalDatasetId = null;
@@ -159,6 +162,10 @@ function updateDatasetMeta(data) {
     const mode = data?.dataset_mode || "generic";
     const importMeta = data?.import_meta || {};
 
+    activeDatasetId = data?.dataset_id || null;
+    activeDatasetSource = data?.source_type || null;
+    activeDatasetVersion = data?.active_version_number || 1;
+
     if (statRecords) statRecords.textContent = records ? records.toLocaleString() : "—";
     if (statColumns) statColumns.textContent = columns || "—";
     if (statMode) {
@@ -177,6 +184,22 @@ function updateDatasetMeta(data) {
             datasetBadgeText.textContent = `${records.toLocaleString()} rows · ${mode} mode`;
         } else {
             datasetBadge.hidden = true;
+        }
+    }
+
+    const heroActiveBadge = document.getElementById("heroActiveBadge");
+    const heroActiveText = document.getElementById("heroActiveText");
+    if (heroActiveBadge && heroActiveText) {
+        if (records > 0) {
+            heroActiveBadge.hidden = false;
+            let label = `Active: ${data.dataset_name || "Dataset"} · v${data.dataset_version || 1} (${records.toLocaleString()} rows · ${mode} mode)`;
+            if (data.last_sync_at) {
+                const syncTime = new Date(data.last_sync_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                label += ` · Refreshed ${syncTime}`;
+            }
+            heroActiveText.textContent = label;
+        } else {
+            heroActiveBadge.hidden = true;
         }
     }
 
@@ -417,28 +440,229 @@ function renderCharts(charts) {
     });
 }
 
-function renderInsights(insights) {
-    const items = insights || [];
-    if (insightsEmpty) insightsEmpty.hidden = items.length > 0;
-    if (!items.length) {
-        insightsList.innerHTML = "";
-        return;
+async function renderProactiveInsights(insights, data) {
+    if (!insights) return;
+    
+    // 1. Render Top KPIs Row
+    const kpiRow = document.getElementById("insightsKpiRow");
+    if (kpiRow) {
+        const topKpis = insights.top_kpis || [];
+        if (topKpis.length === 0) {
+            kpiRow.style.display = "none";
+            kpiRow.innerHTML = "";
+        } else {
+            kpiRow.style.display = "grid";
+            kpiRow.innerHTML = topKpis.map(k => {
+                const label = k.metric.replaceAll("_", " ").replace(/\b\w/g, ch => ch.toUpperCase());
+                let totalVal = k.total;
+                let avgVal = k.average;
+                
+                let totalFormatted = "";
+                if (k.format === "currency") {
+                    totalFormatted = money(totalVal);
+                } else if (k.format === "percent") {
+                    totalFormatted = `${(totalVal <= 1 ? totalVal * 100 : totalVal).toFixed(1)}%`;
+                } else {
+                    totalFormatted = totalVal.toLocaleString(undefined, { maximumFractionDigits: 1 });
+                }
+                
+                return `
+                    <article class="kpi-card mini" style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); padding: 0.85rem; border-radius: 8px; display: flex; flex-direction: column; gap: 0.35rem;">
+                        <span class="label" style="font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;">Total ${label}</span>
+                        <span class="value" style="font-size: 1.25rem; font-weight: 700; color: var(--accent);">${totalFormatted}</span>
+                        <span class="sub" style="font-size: 0.7rem; color: var(--muted);">Avg: ${avgVal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                    </article>
+                `;
+            }).join('');
+        }
     }
 
-    insightsList.innerHTML = items
-        .map((insight) => {
-            const severity = insight.severity || "info";
-            const icon = INSIGHT_ICONS[severity] || INSIGHT_ICONS.info;
-            return `
-        <article class="insight-item ${severity}">
-            <div class="insight-icon" aria-hidden="true">${icon}</div>
-            <div class="insight-body">
-                <h3>${insight.headline}</h3>
-                <p>${insight.detail}</p>
+    // 2. Render Data Quality Summary
+    const dqSummary = document.getElementById("dataQualitySummary");
+    if (dqSummary) {
+        const dq = insights.data_quality || {};
+        const scorePct = Math.round((dq.health_score || 0) * 100);
+        let scoreClass = "success";
+        if (dq.health_grade === "Warning") scoreClass = "danger";
+        else if (dq.health_grade === "Fair") scoreClass = "warning";
+        
+        dqSummary.innerHTML = `
+            <div style="background: rgba(255, 255, 255, 0.02); padding: 0.85rem; border-radius: 8px; display: flex; flex-direction: column; gap: 0.6rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 0.82rem; color: var(--muted);">Completeness Score</span>
+                    <strong style="color: ${scoreClass === 'success' ? '#86efac' : scoreClass === 'warning' ? '#fde047' : '#fca5a5'}; font-size: 0.9rem;">${dq.health_grade} (${scorePct}%)</strong>
+                </div>
+                <div class="confidence-track" style="height: 6px; background: rgba(255, 255, 255, 0.08); border-radius: 4px; overflow: hidden;">
+                    <div class="confidence-fill" style="width: ${scorePct}%; height: 100%; background: ${scoreClass === 'success' ? 'var(--accent)' : scoreClass === 'warning' ? '#f59e0b' : '#ef4899'}; border-radius: 4px;"></div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; font-size: 0.78rem; margin-top: 0.35rem; color: var(--muted);">
+                    <div>
+                        <div>Rows: <strong style="color: var(--text);">${dq.total_rows?.toLocaleString() || 0}</strong></div>
+                        <div>Columns: <strong style="color: var(--text);">${dq.total_columns || 0}</strong></div>
+                    </div>
+                    <div>
+                        <div>Missing Cells: <strong style="color: var(--text);">${dq.missing_cells?.toLocaleString() || 0}</strong></div>
+                        <div>Duplicates: <strong style="color: var(--text);">${dq.duplicate_rows?.toLocaleString() || 0}</strong></div>
+                    </div>
+                </div>
             </div>
-        </article>`;
-        })
-        .join("");
+        `;
+    }
+
+    // 3. Render Business Highlights & Shifts
+    const listShifts = document.getElementById("shiftsHighlightList");
+    if (listShifts) {
+        const highlights = insights.business_highlights || [];
+        const changes = insights.largest_changes || [];
+        const combined = [...highlights, ...changes];
+        if (combined.length === 0) {
+            listShifts.innerHTML = '<li class="empty-state" style="color: var(--muted); font-size: 0.88rem;">No key shifts or highlights identified in this data scope.</li>';
+        } else {
+            listShifts.innerHTML = combined.map(item => `
+                <li style="line-height: 1.4; color: var(--text); margin-bottom: 0.25rem;">
+                    ${item}
+                </li>
+            `).join('');
+        }
+    }
+
+    // Narratives
+    const narratives = insights.narratives || {};
+    const txtExec = document.getElementById("narrativeExec");
+    const txtMgt = document.getElementById("narrativeMgt");
+    const txtOps = document.getElementById("narrativeOps");
+    const txtRisk = document.getElementById("narrativeRisk");
+    const txtOpp = document.getElementById("narrativeOpp");
+    
+    if (txtExec) txtExec.textContent = narratives.executive_summary || "No executive briefing generated.";
+    if (txtMgt) txtMgt.textContent = narratives.management_summary || "No management focus points generated.";
+    if (txtOps) txtOps.textContent = narratives.operational_summary || "No operational status generated.";
+    if (txtRisk) txtRisk.textContent = narratives.risk_summary || "No critical risk flags detected.";
+    if (txtOpp) txtOpp.textContent = narratives.opportunity_summary || "No growth opportunities calculated.";
+
+    // Anomalies
+    const listAnomalies = document.getElementById("anomaliesList");
+    if (listAnomalies) {
+        const items = insights.anomalies || [];
+        if (items.length === 0) {
+            listAnomalies.innerHTML = '<p class="empty-state" style="padding: 1rem 0; margin: 0; color: var(--muted); font-size: 0.88rem;">No anomalies or outliers detected in the active data series.</p>';
+        } else {
+            listAnomalies.innerHTML = items.map(a => {
+                let icon = "💡";
+                if (a.type === "missing_values") icon = "❓";
+                else if (a.type === "duplicates") icon = "👥";
+                else if (a.type === "drop") icon = "📉";
+                else if (a.type === "spike") icon = "📈";
+                else if (a.type === "outliers") icon = "🚨";
+                
+                const confPct = Math.round((a.confidence || 0) * 100);
+                return `
+                    <div class="anomaly-row ${a.type}">
+                        <div class="anomaly-icon">${icon}</div>
+                        <div class="anomaly-content">
+                            <span class="anomaly-msg">${a.message}</span>
+                            <div class="anomaly-meta">
+                                <span>Confidence: ${confPct}%</span>
+                                <div class="confidence-bar-wrap">
+                                    <div class="confidence-track">
+                                        <div class="confidence-fill" style="width: ${confPct}%;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+    }
+
+    // Root Cause Attribution
+    const listAttribution = document.getElementById("attributionList");
+    if (listAttribution) {
+        const items = insights.contributors || [];
+        if (items.length === 0) {
+            listAttribution.innerHTML = '<p class="empty-state" style="padding: 1rem 0; margin: 0; color: var(--muted); font-size: 0.88rem;">No dimensional contribution attribution available.</p>';
+        } else {
+            listAttribution.innerHTML = items.map(c => `
+                <div class="attribution-item">
+                    <div class="attr-left">
+                        <span class="attr-title">${c.category}</span>
+                        <span class="attr-sub">Dimension: ${c.dimension}</span>
+                    </div>
+                    <div class="attr-right">
+                        <span class="attr-share">${c.share_pct}%</span>
+                        <span class="attr-sub">Share of ${c.metric}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+    }
+
+    // Recommendations
+    const listRecs = document.getElementById("recommendationsList");
+    if (listRecs) {
+        const recs = narratives.recommendations || [];
+        if (recs.length === 0) {
+            listRecs.innerHTML = '<li class="empty-state" style="color: var(--muted); font-size: 0.88rem;">No business actions recommended for this dataset.</li>';
+        } else {
+            listRecs.innerHTML = recs.map(r => `<li>${r}</li>`).join('');
+        }
+    }
+
+    // Suggested Questions
+    const listQuestions = document.getElementById("suggestedQuestionsList");
+    if (listQuestions) {
+        const questions = narratives.suggested_questions || [];
+        if (questions.length === 0) {
+            listQuestions.innerHTML = '<p class="empty-state" style="color: var(--muted); font-size: 0.88rem;">No dynamic questions proposed.</p>';
+        } else {
+            listQuestions.innerHTML = questions.map(q => `
+                <button type="button" class="suggested-question-btn" data-question="${q.replace(/"/g, '&quot;')}">
+                    <span>${q}</span>
+                    <span class="question-arrow">→</span>
+                </button>
+            `).join('');
+            
+            // Bind click triggers
+            listQuestions.querySelectorAll(".suggested-question-btn").forEach(btn => {
+                btn.addEventListener("click", () => {
+                    const q = btn.dataset.question;
+                    const input = document.getElementById("chatInput");
+                    if (input) {
+                        input.value = q;
+                        switchTab("assistant");
+                        const form = document.getElementById("chatForm");
+                        if (form) {
+                            form.dispatchEvent(new Event("submit"));
+                        }
+                    }
+                });
+            });
+        }
+    }
+
+    // Populate timeline versions select dropdown
+    const selectVer = document.getElementById("insightsVersionSelect");
+    const containerTimeline = document.getElementById("insightTimelineContainer");
+    if (selectVer && containerTimeline) {
+        if (!data.dataset_id) {
+            containerTimeline.style.display = "none";
+        } else {
+            containerTimeline.style.display = "flex";
+            try {
+                const response = await apiFetch(`/api/data/datasets/${data.dataset_id}/versions/`);
+                if (response.ok) {
+                    const versions = await response.json();
+                    selectVer.innerHTML = versions.map(v => {
+                        const selected = v.version_number === data.dataset_version ? "selected" : "";
+                        return `<option value="${v.version_number}" ${selected}>Version ${v.version_number} (${new Date(v.created_at).toLocaleDateString()})</option>`;
+                    }).join('');
+                }
+            } catch (err) {
+                console.error("Failed to load timeline versions:", err);
+            }
+        }
+    }
 }
 
 function renderAiSummary(summaryText) {
@@ -478,7 +702,7 @@ function applyDashboardData(data) {
     renderKpis(data);
     renderCharts(data.charts);
     renderAiSummary(data.ai_summary);
-    renderInsights(data.ai_insights);
+    renderProactiveInsights(data.proactive_insights, data);
     if (!data.charts?.length) {
         renderTrendChart(data.trends, data.trend_spec);
     }
@@ -654,22 +878,34 @@ urlForm?.addEventListener("submit", async (event) => {
 });
 
 runIngestionBtn?.addEventListener("click", async () => {
-    setDataStatus("Running ingestion sync job…", "info");
+    if (!activeDatasetId) {
+        setDataStatus("No active dataset is loaded to refresh.", "warning");
+        return;
+    }
+    if (activeDatasetSource === "seed") {
+        setDataStatus("Seed dataset cannot be synchronized. Ingest a database table, file or URL to run sync jobs.", "warning");
+        return;
+    }
+    setDataStatus("Syncing dataset from source…", "info");
     try {
-        const response = await apiFetch("/api/ingestion/run/", {
+        const response = await apiFetch(`/api/data/datasets/${activeDatasetId}/sync/`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ source: "dashboard_manual" }),
+            headers: { "Content-Type": "application/json" }
         });
         const data = await response.json();
         if (!response.ok) {
-            setDataStatus(data.detail || "Ingestion failed.", "error");
+            setDataStatus(data.error || "Sync failed.", "error");
             return;
         }
-        setDataStatus(`Sync complete — ${data.records?.toLocaleString()} records processed`, "success");
-        loadDashboard();
+        let msg = `Sync complete — version ${data.version_number} activated (${data.rows?.toLocaleString()} rows)`;
+        if (data.schema_changed) {
+            msg += " · ⚠️ Schema changes detected";
+        }
+        setDataStatus(msg, data.schema_changed ? "warning" : "success");
+        await loadDashboard();
+        await loadDatasetLibrary();
     } catch (error) {
-        setDataStatus(`Ingestion failed: ${error.message}`, "error");
+        setDataStatus(`Sync failed: ${error.message}`, "error");
     }
 });
 
@@ -741,6 +977,7 @@ async function loadDatasetLibrary() {
                     <div class="library-item-actions">
                         ${!ds.is_active && ds.status === 'processed' ? `<button type="button" class="ghost-btn small activate-ds-btn" data-id="${ds.id}">Activate</button>` : ''}
                         <button type="button" class="ghost-btn small manage-versions-btn" data-id="${ds.id}" data-name="${ds.name || ds.display_name}">Versions</button>
+                        <button type="button" class="ghost-btn small sync-ds-action-btn" data-id="${ds.id}">Sync</button>
                         <button type="button" class="ghost-btn small rename-ds-btn" data-id="${ds.id}" data-name="${ds.name || ds.display_name}">Rename</button>
                         <button type="button" class="ghost-btn small archive-ds-btn" data-id="${ds.id}">${ds.is_archived ? 'Unarchive' : 'Archive'}</button>
                         <button type="button" class="ghost-btn small danger delete-ds-btn" style="border-color: rgba(239, 68, 68, 0.35); color: #fca5a5;" data-id="${ds.id}">Delete</button>
@@ -758,6 +995,32 @@ async function loadDatasetLibrary() {
                 const id = e.target.dataset.id;
                 const name = e.target.dataset.name;
                 openVersionsModal(id, name);
+            });
+        });
+        libraryList.querySelectorAll(".sync-ds-action-btn").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                const id = e.target.dataset.id;
+                setDataStatus("Syncing dataset...", "info");
+                try {
+                    const response = await apiFetch(`/api/data/datasets/${id}/sync/`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" }
+                    });
+                    const data = await response.json();
+                    if (!response.ok) {
+                        setDataStatus(data.error || "Sync failed.", "error");
+                        return;
+                    }
+                    let msg = `Sync complete — version ${data.version_number} activated (${data.rows?.toLocaleString()} rows)`;
+                    if (data.schema_changed) {
+                        msg += " · ⚠️ Schema changes detected";
+                    }
+                    setDataStatus(msg, data.schema_changed ? "warning" : "success");
+                    await loadDashboard();
+                    await loadDatasetLibrary();
+                } catch (error) {
+                    setDataStatus(`Sync failed: ${error.message}`, "error");
+                }
             });
         });
         libraryList.querySelectorAll(".rename-ds-btn").forEach(btn => {
@@ -895,6 +1158,9 @@ function initApp() {
     switchTab(initialTab);
     loadDashboard();
     loadBlueprint();
+    initConnectors();
+    initAuthModal();
+    initProactiveInsightsTimeline();
     if (initialTab === "data") {
         loadDatasetLibrary();
     }
@@ -1340,6 +1606,364 @@ if (deleteAccountConfirmBtn) {
                 }
             })
             .catch(() => alert("Network error during account deletion."));
+    });
+}
+
+function initConnectors() {
+    const optButtons = document.querySelectorAll(".connector-option-btn");
+    optButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+            if (btn.classList.contains("disabled")) return;
+            optButtons.forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            
+            const target = btn.dataset.connector;
+            document.querySelectorAll(".connector-form-pane").forEach(pane => {
+                pane.hidden = (pane.id !== `pane-${target}`);
+            });
+        });
+    });
+
+    const pgTestBtn = document.getElementById("pgTestBtn");
+    const pgListTablesBtn = document.getElementById("pgListTablesBtn");
+    const pgIngestSection = document.getElementById("pgIngestSection");
+    const pgTableSelect = document.getElementById("pgTableSelect");
+    const postgresStatus = document.getElementById("postgresStatus");
+    const postgresForm = document.getElementById("postgresForm");
+
+    function setPgStatus(msg, type) {
+        if (!postgresStatus) return;
+        postgresStatus.hidden = !msg;
+        postgresStatus.textContent = msg || "";
+        postgresStatus.className = `status-banner ${type || ""}`;
+    }
+
+    pgTestBtn?.addEventListener("click", async () => {
+        const host = document.getElementById("pgHost").value.trim();
+        const port = document.getElementById("pgPort").value.trim();
+        const username = document.getElementById("pgUser").value.trim();
+        const password = document.getElementById("pgPassword").value;
+        const database = document.getElementById("pgDatabase").value.trim();
+
+        if (!host || !username || !database) {
+            setPgStatus("Host, username, and database name are required to test connection.", "error");
+            return;
+        }
+
+        setPgStatus("Testing database connection...", "info");
+        pgTestBtn.disabled = true;
+
+        try {
+            const res = await apiFetch("/api/data/connectors/test/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ host, port, username, password, database })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setPgStatus(data.error || data.message || "Connection failed.", "error");
+                pgListTablesBtn.disabled = true;
+            } else {
+                setPgStatus("Connection test successful!", "success");
+                pgListTablesBtn.disabled = false;
+            }
+        } catch (err) {
+            setPgStatus(`Error: ${err.message}`, "error");
+        } finally {
+            pgTestBtn.disabled = false;
+        }
+    });
+
+    pgListTablesBtn?.addEventListener("click", async () => {
+        const host = document.getElementById("pgHost").value.trim();
+        const port = document.getElementById("pgPort").value.trim();
+        const username = document.getElementById("pgUser").value.trim();
+        const password = document.getElementById("pgPassword").value;
+        const database = document.getElementById("pgDatabase").value.trim();
+
+        setPgStatus("Discovering tables...", "info");
+        pgListTablesBtn.disabled = true;
+
+        try {
+            const res = await apiFetch("/api/data/connectors/schema/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ host, port, username, password, database })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setPgStatus(data.error || "Schema discovery failed.", "error");
+            } else if (data.tables && data.tables.length > 0) {
+                pgTableSelect.innerHTML = data.tables.map(tbl => `<option value="${tbl}">${tbl}</option>`).join("");
+                pgIngestSection.hidden = false;
+                setPgStatus(`Found ${data.tables.length} tables. Select one to ingest.`, "success");
+            } else {
+                setPgStatus("No tables found in public schema.", "warning");
+            }
+        } catch (err) {
+            setPgStatus(`Error: ${err.message}`, "error");
+        } finally {
+            pgListTablesBtn.disabled = false;
+        }
+    });
+
+    postgresForm?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const host = document.getElementById("pgHost").value.trim();
+        const port = document.getElementById("pgPort").value.trim();
+        const username = document.getElementById("pgUser").value.trim();
+        const password = document.getElementById("pgPassword").value;
+        const database = document.getElementById("pgDatabase").value.trim();
+        const table = pgTableSelect.value;
+        const name = document.getElementById("pgDatasetName").value.trim() || table;
+
+        if (!table) {
+            setPgStatus("Please select a table to ingest.", "error");
+            return;
+        }
+
+        setPgStatus("Ingesting table data...", "info");
+        const submitBtn = postgresForm.querySelector("button[type='submit']");
+        if (submitBtn) submitBtn.disabled = true;
+
+        try {
+            const res = await apiFetch("/api/data/connectors/ingest/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ host, port, username, password, database, table, name })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setPgStatus(data.error || "Table ingestion failed.", "error");
+            } else {
+                setPgStatus("Ingestion successful!", "success");
+                postgresForm.reset();
+                pgIngestSection.hidden = true;
+                pgListTablesBtn.disabled = true;
+                
+                await loadDashboard();
+                await loadDatasetLibrary();
+                switchTab("dashboard");
+            }
+        } catch (err) {
+            setPgStatus(`Error: ${err.message}`, "error");
+        } finally {
+            if (submitBtn) submitBtn.disabled = false;
+        }
+    });
+}
+
+function initAuthModal() {
+    const authModal = document.getElementById("authModal");
+    const openLoginBtn = document.getElementById("openLoginBtn");
+    const openRegisterBtn = document.getElementById("openRegisterBtn");
+    const heroPrimaryCtaRegister = document.getElementById("heroPrimaryCtaRegister");
+    const heroSecondaryCtaLogin = document.getElementById("heroSecondaryCtaLogin");
+    const closeAuthModalBtn = document.getElementById("closeAuthModalBtn");
+
+    const tabBtnLogin = document.getElementById("tabBtnLogin");
+    const tabBtnRegister = document.getElementById("tabBtnRegister");
+    const modalLoginForm = document.getElementById("modalLoginForm");
+    const modalRegisterForm = document.getElementById("modalRegisterForm");
+
+    const loginFormError = document.getElementById("loginFormError");
+    const registerFormError = document.getElementById("registerFormError");
+
+    function showModal(tab = "login") {
+        if (!authModal) return;
+        authModal.hidden = false;
+        switchAuthTab(tab);
+    }
+
+    function hideModal() {
+        if (!authModal) return;
+        authModal.hidden = true;
+        if (loginFormError) loginFormError.hidden = true;
+        if (registerFormError) registerFormError.hidden = true;
+        modalLoginForm?.reset();
+        modalRegisterForm?.reset();
+        const url = new URL(window.location);
+        url.searchParams.delete("auth");
+        window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+    }
+
+    function switchAuthTab(tab) {
+        if (tab === "login") {
+            tabBtnLogin?.classList.add("active");
+            tabBtnRegister?.classList.remove("active");
+            if (modalLoginForm) modalLoginForm.hidden = false;
+            if (modalRegisterForm) modalRegisterForm.hidden = true;
+        } else {
+            tabBtnRegister?.classList.add("active");
+            tabBtnLogin?.classList.remove("active");
+            if (modalLoginForm) modalLoginForm.hidden = true;
+            if (modalRegisterForm) modalRegisterForm.hidden = false;
+        }
+    }
+
+    openLoginBtn?.addEventListener("click", () => showModal("login"));
+    openRegisterBtn?.addEventListener("click", () => showModal("register"));
+    heroPrimaryCtaRegister?.addEventListener("click", () => showModal("register"));
+    heroSecondaryCtaLogin?.addEventListener("click", () => showModal("login"));
+    closeAuthModalBtn?.addEventListener("click", hideModal);
+
+    authModal?.addEventListener("click", (e) => {
+        if (e.target === authModal) hideModal();
+    });
+
+    tabBtnLogin?.addEventListener("click", () => switchAuthTab("login"));
+    tabBtnRegister?.addEventListener("click", () => switchAuthTab("register"));
+
+    document.querySelectorAll(".toggle-password-visibility").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const input = btn.previousElementSibling;
+            if (input) {
+                if (input.type === "password") {
+                    input.type = "text";
+                    btn.textContent = "🙈";
+                } else {
+                    input.type = "password";
+                    btn.textContent = "👁️";
+                }
+            }
+        });
+    });
+
+    modalLoginForm?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const username = document.getElementById("loginUsername").value.trim();
+        const password = document.getElementById("loginPassword").value;
+        const rememberMe = document.getElementById("loginRememberMe").checked;
+
+        if (loginFormError) loginFormError.hidden = true;
+        const submitBtn = document.getElementById("loginSubmitBtn");
+        if (submitBtn) submitBtn.disabled = true;
+
+        try {
+            const res = await apiFetch("/api/auth/login/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username, password, remember_me: rememberMe })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                if (loginFormError) {
+                    loginFormError.textContent = data.error || "Login failed.";
+                    loginFormError.hidden = false;
+                }
+            } else {
+                window.location.href = window.location.pathname;
+            }
+        } catch (err) {
+            if (loginFormError) {
+                loginFormError.textContent = `Error: ${err.message}`;
+                loginFormError.hidden = false;
+            }
+        } finally {
+            if (submitBtn) submitBtn.disabled = false;
+        }
+    });
+
+    modalRegisterForm?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const username = document.getElementById("registerUsername").value.trim();
+        const email = document.getElementById("registerEmail").value.trim();
+        const password1 = document.getElementById("registerPassword1").value;
+        const password2 = document.getElementById("registerPassword2").value;
+
+        if (registerFormError) registerFormError.hidden = true;
+        const submitBtn = document.getElementById("registerSubmitBtn");
+        if (submitBtn) submitBtn.disabled = true;
+
+        try {
+            const res = await apiFetch("/api/auth/register/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username, email, password1, password2 })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                if (registerFormError) {
+                    registerFormError.textContent = data.error || "Registration failed.";
+                    registerFormError.hidden = false;
+                }
+            } else {
+                window.location.href = window.location.pathname;
+            }
+        } catch (err) {
+            if (registerFormError) {
+                registerFormError.textContent = `Error: ${err.message}`;
+                registerFormError.hidden = false;
+            }
+        } finally {
+            if (submitBtn) submitBtn.disabled = false;
+        }
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    const authAction = params.get("auth");
+    if (authAction) {
+        if (openLoginBtn) {
+            if (authAction === "login") {
+                showModal("login");
+            } else if (authAction === "register") {
+                showModal("register");
+            }
+        } else {
+            // Clean up url parameters if already authenticated
+            const url = new URL(window.location);
+            url.searchParams.delete("auth");
+            window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+        }
+    }
+}
+
+function initProactiveInsightsTimeline() {
+    const compareBtn = document.getElementById("compareTimelineInsightsBtn");
+    const closeCompareBtn = document.getElementById("closeInsightCompareBtn");
+    const selectVer = document.getElementById("insightsVersionSelect");
+    const box = document.getElementById("insightComparisonBox");
+
+    compareBtn?.addEventListener("click", async () => {
+        if (!activeDatasetId || !selectVer) return;
+        const selectedVerVal = selectVer.value;
+        if (!selectedVerVal) return;
+
+        compareBtn.disabled = true;
+        compareBtn.textContent = "Comparing…";
+
+        try {
+            const response = await apiFetch(`/api/data/datasets/${activeDatasetId}/versions/compare_insights/?v1=${activeDatasetVersion}&v2=${selectedVerVal}`);
+            if (!response.ok) {
+                alert("Comparison failed: one or both version snapshots could not be analyzed.");
+                return;
+            }
+            const compareData = await response.json();
+            
+            const title1 = document.getElementById("compV1Title");
+            const text1 = document.getElementById("compV1Text");
+            const title2 = document.getElementById("compV2Title");
+            const text2 = document.getElementById("compV2Text");
+            
+            if (box && title1 && text1 && title2 && text2) {
+                title1.textContent = `Current Active Version (v${compareData.v1_number})`;
+                text1.textContent = compareData.v1?.narratives?.executive_summary || "No insights recorded.";
+                
+                title2.textContent = `Selected Comparison Target (v${compareData.v2_number})`;
+                text2.textContent = compareData.v2?.narratives?.executive_summary || "No insights recorded.";
+                
+                box.hidden = false;
+            }
+        } catch (err) {
+            alert(`Error comparing version insights: ${err.message}`);
+        } finally {
+            compareBtn.disabled = false;
+            compareBtn.textContent = "Compare Version";
+        }
+    });
+
+    closeCompareBtn?.addEventListener("click", () => {
+        if (box) box.hidden = true;
     });
 }
 

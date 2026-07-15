@@ -129,6 +129,7 @@ class DatasetUpload(models.Model):
     SOURCE_CHOICES = (
         ("file", "File"),
         ("url", "URL"),
+        ("postgres", "PostgreSQL"),
     )
 
     organization = models.ForeignKey(
@@ -159,12 +160,15 @@ class DatasetUpload(models.Model):
     file = models.FileField(upload_to="datasets/", null=True, blank=True)
     source_url = models.URLField(blank=True, default="")
     stored_path = models.CharField(max_length=255, blank=True, default="")
+    connection_config = models.JSONField(default=dict, blank=True)
+    last_sync_at = models.DateTimeField(null=True, blank=True)
     row_count = models.IntegerField(default=0)
     ai_blueprint = models.JSONField(default=dict, blank=True)
     status = models.CharField(max_length=24, default="processed")
     error_message = models.TextField(blank=True, default="")
     is_archived = models.BooleanField(default=False)
     active_version_number = models.IntegerField(default=1)
+    insights_cache = models.JSONField(default=dict, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     @property
@@ -197,6 +201,7 @@ class DatasetVersion(models.Model):
     stored_path = models.CharField(max_length=255, blank=True, default="")
     row_count = models.IntegerField(default=0)
     ai_blueprint = models.JSONField(default=dict, blank=True)
+    insights_cache = models.JSONField(default=dict, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

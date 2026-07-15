@@ -8,6 +8,7 @@
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | Production deployment guide |
 | [SECURITY.md](./SECURITY.md) | SSRF and security checklist |
 | [CHANGELOG.md](./CHANGELOG.md) | Version history |
+| [CONNECTOR_GUIDE.md](./CONNECTOR_GUIDE.md) | Universal Connector Developer Guide |
 | [PHASE1_RETROSPECTIVE.md](./PHASE1_RETROSPECTIVE.md) | Phase 1 summary |
 | [PHASE2_ROADMAP.md](./PHASE2_ROADMAP.md) | Phase 2 plan |
 

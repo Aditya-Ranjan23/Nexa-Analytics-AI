@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### [0.6.0] — 2026-07-15 — Universal Connector Framework & Premium Navigation
+
+### Added
+- **PostgreSQL Connection**: Support connection testing, schema discovery (table listing), and direct database table data pulling.
+- **Credential Cryptography**: Implemented AES-256 Fernet password encryption backed by `settings.SECRET_KEY` inside `crypto.py`.
+- **Dataset Sync & Versioning**: Replaced static sync logic with dynamic, source-aware sync that creates fresh `DatasetVersion` snapshots and detects column schema modifications.
+- **Connector Library UI**: Unified tabbed ingestion UI containing CSV/Excel, PostgreSQL forms, and disabled "Coming Soon" cloud connection slots (Snowflake, BigQuery).
+- **Connector API endpoints**: Mapped `/api/data/connectors/test/`, `/api/data/connectors/schema/`, `/api/data/connectors/ingest/`, and `/api/data/datasets/<id>/sync/` controllers.
+- **SaaS Header**: Sticky top navigation bar containing logo, workspace context pill, user initials avatar, and core navigation menu.
+- **Glassmorphic Auth Modal**: A single unified authentication modal on the dashboard for AJAX login and signup workflows, including remember me toggles and password visibility handlers.
+- **SaaS Hero Section**: Customer-centric hero layout showing active dataset summary metrics with real-time green pulsing badges and last sync times.
+- **Tests**: Appended `CryptographyTests`, `ConnectorPipelineTests`, and `AjaxAuthenticationTests` classes covering discovery, encryption, version incrementing, and AJAX auth flows.
+
+---
+
+### [0.5.0] — 2026-07-14 — Phase 4: Identity & User Experience
+
+### Added
+- **Authentication**: User registration, login with Remember Me (2 weeks cookie life), logout, and password reset form flows.
+- **User Profile**: Extension `UserProfile` model containing display name, bio, timezone, avatar image, and theme preference.
+- **Account Operations**: API views for updating profile details, saving preferences, exporting account JSON data, and deleting accounts.
+- **Onboarding checklist**: Dashboard banner rendering step-by-step guidance for empty workspaces.
+- **Dynamic Navigation**: Dynamic authentication-aware tabs (Profile/Settings/Logout vs Login/Register).
+
+---
+
 ### [0.4.0] — 2026-07-14 — Phase 3: Workspace Foundation
 
 ### Added

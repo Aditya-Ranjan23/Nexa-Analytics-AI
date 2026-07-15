@@ -85,6 +85,9 @@ def persist_dataset_activation(
 ) -> dict:
     row_count, blueprint, mode = activate_dataset(df, import_meta)
     
+    from .intelligent_analytics import run_intelligent_analytics
+    insights = run_intelligent_analytics(df, name or (dataset_upload.name if dataset_upload else "Dataset"), source_type)
+    
     if dataset_upload:
         # We are uploading a new version of an existing dataset.
         # 1. Fetch maximum existing version number
@@ -98,6 +101,7 @@ def persist_dataset_activation(
         dataset_upload.ai_blueprint = blueprint
         dataset_upload.status = "processed"
         dataset_upload.active_version_number = new_v
+        dataset_upload.insights_cache = insights
         if file_field:
             dataset_upload.file = file_field
         if source_url:
@@ -115,6 +119,7 @@ def persist_dataset_activation(
             stored_path=str(stored_path),
             row_count=row_count,
             ai_blueprint=blueprint,
+            insights_cache=insights,
         )
         
         # 4. Make it active state
@@ -153,6 +158,7 @@ def persist_dataset_activation(
             "status": "processed",
             "name": name,
             "active_version_number": 1,
+            "insights_cache": insights,
         }
         if file_field:
             create_kwargs["file"] = file_field
@@ -176,6 +182,7 @@ def persist_dataset_activation(
             stored_path=str(stored_path),
             row_count=row_count,
             ai_blueprint=blueprint,
+            insights_cache=insights,
         )
         
         state = resolve_dashboard_state(request)
