@@ -1,15 +1,23 @@
-# Nexa Analytics AI Assistant — pinned runtime dependencies
-#
-# Generated: 2026-07-13  Python 3.13.3
-# To regenerate: pip freeze | grep -E "^(Django|djangorestframework|python-dotenv|requests|pandas|openpyxl)=="
-#
-# Upgrade policy:
-#   - Minor/patch: upgrade freely in dev, pin in this file after testing.
-#   - Major: review breaking changes; update ADR if architecture changes.
-
+# ─── REQUIRED RUNTIME DEPENDENCIES ───────────────────────────────────────────
 Django==6.0.2
 djangorestframework==3.16.1
+pandas==2.2.3
 python-dotenv==1.0.0
 requests==2.32.5
-pandas==2.2.3
 openpyxl==3.1.5
+pillow==11.1.0
+gunicorn==20.1.0
+
+# ─── TRANSITIVE RUNTIME DEPENDENCIES ─────────────────────────────────────────
+asgiref==3.11.1              # Required by Django
+sqlparse==0.5.5              # Required by Django
+tzdata==2025.3               # Required by Django / Pandas on Windows
+numpy==2.2.2                 # Required by Pandas
+python-dateutil==2.9.0.post0 # Required by Pandas
+pytz==2025.1                 # Required by Pandas
+six==1.17.0                  # Required by python-dateutil
+certifi==2025.1.31           # Required by requests
+charset-normalizer==2.0.12   # Required by requests
+idna==3.10                   # Required by requests
+urllib3==1.26.20             # Required by requests
+et_xmlfile==2.0.0            # Required by openpyxl
