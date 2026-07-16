@@ -4,7 +4,6 @@ import uuid
 import logging
 from pathlib import Path
 import pandas as pd
-import psycopg
 
 from django.conf import settings
 from django.core.files.base import ContentFile
@@ -12,75 +11,47 @@ from django.core.files.storage import default_storage
 from django.utils import timezone
 
 from .models import DatasetUpload, DatasetVersion
-from .crypto import decrypt_password
 from .data_loaders import load_tabular_from_path
 from .schema import validate_dataset_columns
 from .upload_service import persist_dataset_activation
 
+# Import the new connector framework
+from .connectors.registry import ConnectorRegistry
+
 logger = logging.getLogger(__name__)
 
-def get_postgres_connection(config: dict):
-    password = decrypt_password(config.get("password", ""))
-    conn = psycopg.connect(
-        host=config.get("host"),
-        port=int(config.get("port", 5432)),
-        dbname=config.get("database"),
-        user=config.get("username"),
-        password=password,
-        connect_timeout=5,
-    )
-    return conn
-
-def test_postgres_connection(config: dict) -> tuple[bool, str]:
+def test_connection(engine: str, config: dict) -> tuple[bool, str]:
+    """Test a database connection via the connector registry."""
     try:
-        conn = get_postgres_connection(config)
-        conn.close()
-        return True, "Connection successful."
+        connector = ConnectorRegistry.get_connector(engine)
+        return connector.test_connection(config)
     except Exception as e:
         return False, str(e)
 
-def discover_postgres_tables(config: dict) -> list[str]:
-    conn = get_postgres_connection(config)
-    try:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = 'public' 
-                AND table_type = 'BASE TABLE'
-                ORDER BY table_name;
-            """)
-            tables = [row[0] for row in cur.fetchall()]
-            return tables
-    finally:
-        conn.close()
+def discover_tables(engine: str, config: dict) -> list[str]:
+    """Discover tables for a given database engine."""
+    connector = ConnectorRegistry.get_connector(engine)
+    return connector.discover_tables(config)
 
-def fetch_postgres_table_data(config: dict, table_name: str) -> pd.DataFrame:
-    conn = get_postgres_connection(config)
-    try:
-        if not re.match(r"^[a-zA-Z0-9_]+$", table_name):
-            raise ValueError("Invalid table name characters.")
-            
-        with conn.cursor() as cur:
-            cur.execute(f'SELECT * FROM "{table_name}"')
-            rows = cur.fetchall()
-            columns = [desc[0] for desc in cur.description]
-            df = pd.DataFrame(rows, columns=columns)
-            return df
-    finally:
-        conn.close()
+def fetch_table_data(engine: str, config: dict, table_name: str) -> pd.DataFrame:
+    """Fetch table data using the specified engine's connector."""
+    connector = ConnectorRegistry.get_connector(engine)
+    return connector.fetch_table(config, table_name)
 
 def sync_dataset_source(request, dataset_upload: DatasetUpload) -> dict:
     source_type = dataset_upload.source_type
     
-    if source_type == "postgres":
+    # Supported database engine source types
+    db_engines = ConnectorRegistry.get_supported_engines()
+    
+    if source_type in db_engines:
         config = dataset_upload.connection_config
         table_name = config.get("table")
         if not table_name:
             raise ValueError("No database table configured for this dataset.")
             
-        # Pull fresh table data
-        df = fetch_postgres_table_data(config, table_name)
+        # Pull fresh table data using the connector framework
+        df = fetch_table_data(source_type, config, table_name)
         
         # Check for schema changes
         old_cols = [c["name"] for c in dataset_upload.ai_blueprint.get("columns", [])]
@@ -93,14 +64,14 @@ def sync_dataset_source(request, dataset_upload: DatasetUpload) -> dict:
             )
             
         # Save table content to unique CSV file name in django storage
-        safe_name = re.sub(r"[^a-zA-Z0-9_]", "_", dataset_upload.name or "postgres_dataset")
+        safe_name = re.sub(r"[^a-zA-Z0-9_]", "_", dataset_upload.name or f"{source_type}_dataset")
         csv_data = df.to_csv(index=False).encode("utf-8")
         storage_name = default_storage.save(
             f"datasets/{safe_name}_{uuid.uuid4().hex[:8]}.csv",
             ContentFile(csv_data)
         )
         stored_file_path = Path(settings.MEDIA_ROOT) / storage_name
-        import_meta = {"format": "postgres", "table": table_name}
+        import_meta = {"format": source_type, "table": table_name}
         
         # Validate columns
         is_valid, missing, _ = validate_dataset_columns(df.columns.tolist())
@@ -110,7 +81,7 @@ def sync_dataset_source(request, dataset_upload: DatasetUpload) -> dict:
         # Run activation and save version
         res = persist_dataset_activation(
             request,
-            source_type="postgres",
+            source_type=source_type,
             stored_path=stored_file_path,
             df=df,
             import_meta=import_meta,

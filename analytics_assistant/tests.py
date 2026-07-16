@@ -1045,9 +1045,9 @@ class ConnectorPipelineTests(TestCase):
         dummy_req = type("Req", (), {"user": self.user})()
         self.workspace = resolve_active_workspace(dummy_req)
 
-    @patch("analytics_assistant.connector_pipeline.get_postgres_connection")
+    @patch("analytics_assistant.connectors.postgres.PostgresConnector._get_connection")
     def test_test_postgres_connection_success(self, mock_get_conn):
-        from analytics_assistant.connector_pipeline import test_postgres_connection
+        from analytics_assistant.connector_pipeline import test_connection
         mock_conn = MagicMock()
         mock_get_conn.return_value = mock_conn
 
@@ -1058,14 +1058,14 @@ class ConnectorPipelineTests(TestCase):
             "password": encrypt_password("pass"),
             "database": "testdb",
         }
-        success, msg = test_postgres_connection(config)
+        success, msg = test_connection("postgres", config)
         self.assertTrue(success)
         mock_get_conn.assert_called_once_with(config)
         mock_conn.close.assert_called_once()
 
-    @patch("analytics_assistant.connector_pipeline.get_postgres_connection")
+    @patch("analytics_assistant.connectors.postgres.PostgresConnector._get_connection")
     def test_discover_postgres_tables(self, mock_get_conn):
-        from analytics_assistant.connector_pipeline import discover_postgres_tables
+        from analytics_assistant.connector_pipeline import discover_tables
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         mock_cur.fetchall.return_value = [("users",), ("sales_data",)]
@@ -1079,13 +1079,13 @@ class ConnectorPipelineTests(TestCase):
             "password": encrypt_password("pass"),
             "database": "testdb",
         }
-        tables = discover_postgres_tables(config)
+        tables = discover_tables("postgres", config)
         self.assertEqual(tables, ["users", "sales_data"])
         mock_get_conn.assert_called_once_with(config)
 
-    @patch("analytics_assistant.connector_pipeline.get_postgres_connection")
+    @patch("analytics_assistant.connectors.postgres.PostgresConnector._get_connection")
     def test_fetch_postgres_table_data(self, mock_get_conn):
-        from analytics_assistant.connector_pipeline import fetch_postgres_table_data
+        from analytics_assistant.connector_pipeline import fetch_table_data
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         mock_cur.description = [("date",), ("revenue",), ("orders",), ("ad_spend",), ("conversion_rate",), ("channel",)]
@@ -1103,12 +1103,12 @@ class ConnectorPipelineTests(TestCase):
             "password": encrypt_password("pass"),
             "database": "testdb",
         }
-        df = fetch_postgres_table_data(config, "sales_data")
+        df = fetch_table_data("postgres", config, "sales_data")
         self.assertEqual(df.shape, (2, 6))
         self.assertEqual(list(df.columns), ["date", "revenue", "orders", "ad_spend", "conversion_rate", "channel"])
         mock_get_conn.assert_called_once_with(config)
 
-    @patch("analytics_assistant.connector_pipeline.get_postgres_connection")
+    @patch("analytics_assistant.connectors.postgres.PostgresConnector._get_connection")
     def test_sync_dataset_postgres_increments_version(self, mock_get_conn):
         mock_conn = MagicMock()
         mock_cur = MagicMock()

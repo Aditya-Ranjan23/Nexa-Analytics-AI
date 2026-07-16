@@ -1706,133 +1706,161 @@ function initConnectors() {
         });
     });
 
-    const pgTestBtn = document.getElementById("pgTestBtn");
-    const pgListTablesBtn = document.getElementById("pgListTablesBtn");
-    const pgIngestSection = document.getElementById("pgIngestSection");
-    const pgTableSelect = document.getElementById("pgTableSelect");
-    const postgresStatus = document.getElementById("postgresStatus");
-    const postgresForm = document.getElementById("postgresForm");
+    function bindDatabaseConnector(prefix, engineName) {
+        const testBtn = document.getElementById(`${prefix}TestBtn`);
+        const listTablesBtn = document.getElementById(`${prefix}ListTablesBtn`);
+        const ingestSection = document.getElementById(`${prefix}IngestSection`);
+        const tableSelect = document.getElementById(`${prefix}TableSelect`);
+        const statusEl = document.getElementById(`${prefix}Status`);
+        const formEl = document.getElementById(`${prefix}Form`);
+        const winAuthChk = document.getElementById(`${prefix}WindowsAuth`);
+        const authGroup = document.getElementById(`${prefix}AuthGroup`);
 
-    function setPgStatus(msg, type) {
-        if (!postgresStatus) return;
-        postgresStatus.hidden = !msg;
-        postgresStatus.textContent = msg || "";
-        postgresStatus.className = `status-banner ${type || ""}`;
+        if (!formEl) return;
+        
+        if (winAuthChk && authGroup) {
+            winAuthChk.addEventListener("change", (e) => {
+                authGroup.style.display = e.target.checked ? "none" : "flex";
+            });
+        }
+
+        function setStatus(msg, type) {
+            if (!statusEl) return;
+            statusEl.hidden = !msg;
+            statusEl.textContent = msg || "";
+            statusEl.className = `status-banner ${type || ""}`;
+        }
+
+        function getPayload() {
+            const payload = { engine: engineName };
+            const fields = ["Host", "Port", "User", "Password", "Database", "DbPath", "Server", "WindowsAuth"];
+            fields.forEach(f => {
+                const el = document.getElementById(`${prefix}${f}`);
+                if (el) {
+                    if (el.type === 'checkbox') {
+                        payload[f.toLowerCase()] = el.checked;
+                    } else {
+                        payload[f.toLowerCase()] = el.value.trim();
+                    }
+                }
+            });
+            if (payload.user !== undefined) {
+                payload.username = payload.user;
+                delete payload.user;
+            }
+            if (payload.dbpath !== undefined) {
+                payload.db_path = payload.dbpath;
+                delete payload.dbpath;
+            }
+            if (payload.windowsauth !== undefined) {
+                payload.windows_auth = payload.windowsauth;
+                delete payload.windowsauth;
+            }
+            return payload;
+        }
+
+        testBtn?.addEventListener("click", async () => {
+            setStatus("Testing database connection...", "info");
+            testBtn.disabled = true;
+
+            try {
+                const res = await apiFetch("/api/data/connectors/test/", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(getPayload())
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    setStatus(data.error || data.message || "Connection failed.", "error");
+                    if(listTablesBtn) listTablesBtn.disabled = true;
+                } else {
+                    setStatus("Connection test successful!", "success");
+                    if(listTablesBtn) listTablesBtn.disabled = false;
+                }
+            } catch (err) {
+                setStatus(`Error: ${err.message}`, "error");
+            } finally {
+                testBtn.disabled = false;
+            }
+        });
+
+        listTablesBtn?.addEventListener("click", async () => {
+            setStatus("Discovering tables...", "info");
+            listTablesBtn.disabled = true;
+
+            try {
+                const res = await apiFetch("/api/data/connectors/schema/", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(getPayload())
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    setStatus(data.error || "Schema discovery failed.", "error");
+                } else if (data.tables && data.tables.length > 0) {
+                    tableSelect.innerHTML = data.tables.map(tbl => `<option value="${tbl}">${tbl}</option>`).join("");
+                    ingestSection.hidden = false;
+                    setStatus(`Found ${data.tables.length} tables. Select one to ingest.`, "success");
+                } else {
+                    setStatus("No tables found.", "warning");
+                }
+            } catch (err) {
+                setStatus(`Error: ${err.message}`, "error");
+            } finally {
+                listTablesBtn.disabled = false;
+            }
+        });
+
+        formEl?.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const table = tableSelect?.value;
+            const nameEl = document.getElementById(`${prefix}DatasetName`);
+            const name = nameEl ? (nameEl.value.trim() || table) : table;
+
+            if (!table) {
+                setStatus("Please select a table to ingest.", "error");
+                return;
+            }
+
+            setStatus("Ingesting table data...", "info");
+            const submitBtn = formEl.querySelector("button[type='submit']");
+            if (submitBtn) submitBtn.disabled = true;
+
+            try {
+                const payload = getPayload();
+                payload.table = table;
+                payload.name = name;
+
+                const res = await apiFetch("/api/data/connectors/ingest/", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    setStatus(data.error || "Table ingestion failed.", "error");
+                } else {
+                    setStatus("Ingestion successful!", "success");
+                    formEl.reset();
+                    if(ingestSection) ingestSection.hidden = true;
+                    if(listTablesBtn) listTablesBtn.disabled = true;
+                    
+                    await loadDashboard();
+                    await loadDatasetLibrary();
+                    switchTab("dashboard");
+                }
+            } catch (err) {
+                setStatus(`Error: ${err.message}`, "error");
+            } finally {
+                if (submitBtn) submitBtn.disabled = false;
+            }
+        });
     }
 
-    pgTestBtn?.addEventListener("click", async () => {
-        const host = document.getElementById("pgHost").value.trim();
-        const port = document.getElementById("pgPort").value.trim();
-        const username = document.getElementById("pgUser").value.trim();
-        const password = document.getElementById("pgPassword").value;
-        const database = document.getElementById("pgDatabase").value.trim();
-
-        if (!host || !username || !database) {
-            setPgStatus("Host, username, and database name are required to test connection.", "error");
-            return;
-        }
-
-        setPgStatus("Testing database connection...", "info");
-        pgTestBtn.disabled = true;
-
-        try {
-            const res = await apiFetch("/api/data/connectors/test/", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ host, port, username, password, database })
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                setPgStatus(data.error || data.message || "Connection failed.", "error");
-                pgListTablesBtn.disabled = true;
-            } else {
-                setPgStatus("Connection test successful!", "success");
-                pgListTablesBtn.disabled = false;
-            }
-        } catch (err) {
-            setPgStatus(`Error: ${err.message}`, "error");
-        } finally {
-            pgTestBtn.disabled = false;
-        }
-    });
-
-    pgListTablesBtn?.addEventListener("click", async () => {
-        const host = document.getElementById("pgHost").value.trim();
-        const port = document.getElementById("pgPort").value.trim();
-        const username = document.getElementById("pgUser").value.trim();
-        const password = document.getElementById("pgPassword").value;
-        const database = document.getElementById("pgDatabase").value.trim();
-
-        setPgStatus("Discovering tables...", "info");
-        pgListTablesBtn.disabled = true;
-
-        try {
-            const res = await apiFetch("/api/data/connectors/schema/", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ host, port, username, password, database })
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                setPgStatus(data.error || "Schema discovery failed.", "error");
-            } else if (data.tables && data.tables.length > 0) {
-                pgTableSelect.innerHTML = data.tables.map(tbl => `<option value="${tbl}">${tbl}</option>`).join("");
-                pgIngestSection.hidden = false;
-                setPgStatus(`Found ${data.tables.length} tables. Select one to ingest.`, "success");
-            } else {
-                setPgStatus("No tables found in public schema.", "warning");
-            }
-        } catch (err) {
-            setPgStatus(`Error: ${err.message}`, "error");
-        } finally {
-            pgListTablesBtn.disabled = false;
-        }
-    });
-
-    postgresForm?.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const host = document.getElementById("pgHost").value.trim();
-        const port = document.getElementById("pgPort").value.trim();
-        const username = document.getElementById("pgUser").value.trim();
-        const password = document.getElementById("pgPassword").value;
-        const database = document.getElementById("pgDatabase").value.trim();
-        const table = pgTableSelect.value;
-        const name = document.getElementById("pgDatasetName").value.trim() || table;
-
-        if (!table) {
-            setPgStatus("Please select a table to ingest.", "error");
-            return;
-        }
-
-        setPgStatus("Ingesting table data...", "info");
-        const submitBtn = postgresForm.querySelector("button[type='submit']");
-        if (submitBtn) submitBtn.disabled = true;
-
-        try {
-            const res = await apiFetch("/api/data/connectors/ingest/", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ host, port, username, password, database, table, name })
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                setPgStatus(data.error || "Table ingestion failed.", "error");
-            } else {
-                setPgStatus("Ingestion successful!", "success");
-                postgresForm.reset();
-                pgIngestSection.hidden = true;
-                pgListTablesBtn.disabled = true;
-                
-                await loadDashboard();
-                await loadDatasetLibrary();
-                switchTab("dashboard");
-            }
-        } catch (err) {
-            setPgStatus(`Error: ${err.message}`, "error");
-        } finally {
-            if (submitBtn) submitBtn.disabled = false;
-        }
-    });
+    bindDatabaseConnector("pg", "postgres");
+    bindDatabaseConnector("mysql", "mysql");
+    bindDatabaseConnector("sqlserver", "sqlserver");
+    bindDatabaseConnector("sqlite", "sqlite");
 }
 
 function initAuthModal() {

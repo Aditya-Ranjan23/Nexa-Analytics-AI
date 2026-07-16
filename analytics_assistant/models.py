@@ -130,6 +130,9 @@ class DatasetUpload(models.Model):
         ("file", "File"),
         ("url", "URL"),
         ("postgres", "PostgreSQL"),
+        ("mysql", "MySQL"),
+        ("sqlite", "SQLite"),
+        ("sqlserver", "SQL Server"),
     )
 
     organization = models.ForeignKey(

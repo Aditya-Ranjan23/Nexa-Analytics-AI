@@ -736,27 +736,37 @@ def delete_account(request):
 
 @api_view(["POST"])
 def test_connector_connection(request):
+    engine = request.data.get("engine", "postgres")
     host = request.data.get("host")
-    port = request.data.get("port", 5432)
+    port = request.data.get("port")
     username = request.data.get("username")
     password = request.data.get("password", "")
     database = request.data.get("database")
+    db_path = request.data.get("db_path")
+    server = request.data.get("server")
 
-    if not all([host, username, database]):
-        return Response({"error": "Host, username, and database name are required."}, status=status.HTTP_400_BAD_REQUEST)
+    if engine in ["postgres", "mysql"] and not all([host, username, database]):
+        return Response({"error": f"Host, username, and database name are required for {engine}."}, status=status.HTTP_400_BAD_REQUEST)
+    if engine == "sqlite" and not db_path:
+        return Response({"error": "db_path is required for SQLite."}, status=status.HTTP_400_BAD_REQUEST)
+    if engine == "sqlserver" and not all([server, database]):
+        return Response({"error": "Server and database name are required for SQL Server."}, status=status.HTTP_400_BAD_REQUEST)
 
     from .crypto import encrypt_password
-    from .connector_pipeline import test_postgres_connection
+    from .connector_pipeline import test_connection
 
     config = {
         "host": host,
         "port": port,
         "username": username,
-        "password": encrypt_password(password),
+        "password": encrypt_password(password) if password else "",
         "database": database,
+        "db_path": db_path,
+        "server": server,
+        "windows_auth": request.data.get("windows_auth", False),
     }
 
-    success, message = test_postgres_connection(config)
+    success, message = test_connection(engine, config)
     if success:
         return Response({"success": True, "message": message}, status=status.HTTP_200_OK)
     else:
@@ -765,28 +775,38 @@ def test_connector_connection(request):
 
 @api_view(["POST"])
 def get_connector_schema(request):
+    engine = request.data.get("engine", "postgres")
     host = request.data.get("host")
-    port = request.data.get("port", 5432)
+    port = request.data.get("port")
     username = request.data.get("username")
     password = request.data.get("password", "")
     database = request.data.get("database")
+    db_path = request.data.get("db_path")
+    server = request.data.get("server")
 
-    if not all([host, username, database]):
-        return Response({"error": "Host, username, and database name are required."}, status=status.HTTP_400_BAD_REQUEST)
+    if engine in ["postgres", "mysql"] and not all([host, username, database]):
+        return Response({"error": f"Host, username, and database name are required for {engine}."}, status=status.HTTP_400_BAD_REQUEST)
+    if engine == "sqlite" and not db_path:
+        return Response({"error": "db_path is required for SQLite."}, status=status.HTTP_400_BAD_REQUEST)
+    if engine == "sqlserver" and not all([server, database]):
+        return Response({"error": "Server and database name are required for SQL Server."}, status=status.HTTP_400_BAD_REQUEST)
 
     from .crypto import encrypt_password
-    from .connector_pipeline import discover_postgres_tables
+    from .connector_pipeline import discover_tables
 
     config = {
         "host": host,
         "port": port,
         "username": username,
-        "password": encrypt_password(password),
+        "password": encrypt_password(password) if password else "",
         "database": database,
+        "db_path": db_path,
+        "server": server,
+        "windows_auth": request.data.get("windows_auth", False),
     }
 
     try:
-        tables = discover_postgres_tables(config)
+        tables = discover_tables(engine, config)
         return Response({"tables": tables}, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -794,16 +814,26 @@ def get_connector_schema(request):
 
 @api_view(["POST"])
 def ingest_connector_table(request):
+    engine = request.data.get("engine", "postgres")
     host = request.data.get("host")
-    port = request.data.get("port", 5432)
+    port = request.data.get("port")
     username = request.data.get("username")
     password = request.data.get("password", "")
     database = request.data.get("database")
+    db_path = request.data.get("db_path")
+    server = request.data.get("server")
     table = request.data.get("table")
     name = request.data.get("name")
 
-    if not all([host, username, database, table, name]):
-        return Response({"error": "All fields, including database table and name, are required."}, status=status.HTTP_400_BAD_REQUEST)
+    if not table or not name:
+        return Response({"error": "Table and name are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    if engine in ["postgres", "mysql"] and not all([host, username, database]):
+        return Response({"error": f"Host, username, and database name are required for {engine}."}, status=status.HTTP_400_BAD_REQUEST)
+    if engine == "sqlite" and not db_path:
+        return Response({"error": "db_path is required for SQLite."}, status=status.HTTP_400_BAD_REQUEST)
+    if engine == "sqlserver" and not all([server, database]):
+        return Response({"error": "Server and database name are required for SQL Server."}, status=status.HTTP_400_BAD_REQUEST)
 
     from pathlib import Path
     import re
@@ -812,7 +842,7 @@ def ingest_connector_table(request):
     from django.core.files.base import ContentFile
     from django.core.files.storage import default_storage
     from .crypto import encrypt_password
-    from .connector_pipeline import fetch_postgres_table_data
+    from .connector_pipeline import fetch_table_data
     from .schema import validate_dataset_columns
     from .upload_service import persist_dataset_activation
 
@@ -820,13 +850,16 @@ def ingest_connector_table(request):
         "host": host,
         "port": port,
         "username": username,
-        "password": encrypt_password(password),
+        "password": encrypt_password(password) if password else "",
         "database": database,
         "table": table,
+        "db_path": db_path,
+        "server": server,
+        "windows_auth": request.data.get("windows_auth", False),
     }
 
     try:
-        df = fetch_postgres_table_data(config, table)
+        df = fetch_table_data(engine, config, table)
         is_valid, missing, _ = validate_dataset_columns(df.columns.tolist())
         if not is_valid:
             return Response({"error": f"Schema validation failed: missing columns {', '.join(missing)}"}, status=status.HTTP_400_BAD_REQUEST)
@@ -838,11 +871,11 @@ def ingest_connector_table(request):
             ContentFile(csv_data)
         )
         stored_file_path = Path(settings.MEDIA_ROOT) / storage_name
-        import_meta = {"format": "postgres", "table": table}
+        import_meta = {"format": engine, "table": table}
 
         res = persist_dataset_activation(
             request,
-            source_type="postgres",
+            source_type=engine,
             stored_path=stored_file_path,
             df=df,
             import_meta=import_meta,
@@ -859,6 +892,7 @@ def ingest_connector_table(request):
         return Response(res, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 @api_view(["POST"])

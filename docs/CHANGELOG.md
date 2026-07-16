@@ -185,3 +185,5 @@ See `docs/PHASE1_RETROSPECTIVE.md` for full Phase 1 change log.
 - Structured logging
 - 31 automated tests
 - Architecture documentation, ADR register, technical debt register
+U p d a t e s   t o   A R C H I T E C T U R E . m d   a n d   C O N N E C T O R _ G U I D E . m d   t o   r e f l e c t   t h e   n e w   C o n n e c t o r   R e g i s t r y   a r c h i t e c t u r e   a n d   M y S Q L / S Q L i t e / S Q L   S e r v e r   s u p p o r t .  
+ 

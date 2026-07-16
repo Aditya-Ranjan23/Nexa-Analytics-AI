@@ -9,7 +9,8 @@ pillow==11.1.0
 gunicorn==20.1.0
 cryptography==46.0.5
 psycopg-binary==3.3.3
-
+pymysql==1.2.0
+pyodbc==5.3.0
 # ─── TRANSITIVE RUNTIME DEPENDENCIES ─────────────────────────────────────────
 asgiref==3.11.1              # Required by Django
 sqlparse==0.5.5              # Required by Django

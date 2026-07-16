@@ -167,7 +167,22 @@
                                 <button type="button" class="connector-option-btn" id="connector-opt-postgres" data-connector="postgres">
                                     <span class="connector-icon">🐘</span>
                                     <strong>PostgreSQL</strong>
-                                    <span class="connector-meta">Secure database connection</span>
+                                    <span class="connector-meta">Secure connection</span>
+                                </button>
+                                <button type="button" class="connector-option-btn" id="connector-opt-mysql" data-connector="mysql">
+                                    <span class="connector-icon">🐬</span>
+                                    <strong>MySQL</strong>
+                                    <span class="connector-meta">Secure connection</span>
+                                </button>
+                                <button type="button" class="connector-option-btn" id="connector-opt-sqlserver" data-connector="sqlserver">
+                                    <span class="connector-icon">🪟</span>
+                                    <strong>SQL Server</strong>
+                                    <span class="connector-meta">Including Express</span>
+                                </button>
+                                <button type="button" class="connector-option-btn" id="connector-opt-sqlite" data-connector="sqlite">
+                                    <span class="connector-icon">🪶</span>
+                                    <strong>SQLite</strong>
+                                    <span class="connector-meta">Local .db/.sqlite</span>
                                 </button>
                                 <button type="button" class="connector-option-btn disabled" disabled>
                                     <span class="connector-icon">❄️</span>
@@ -177,6 +192,21 @@
                                 <button type="button" class="connector-option-btn disabled" disabled>
                                     <span class="connector-icon">☁️</span>
                                     <strong>BigQuery</strong>
+                                    <span class="connector-meta">Coming soon</span>
+                                </button>
+                                <button type="button" class="connector-option-btn disabled" disabled>
+                                    <span class="connector-icon">🔴</span>
+                                    <strong>Redshift</strong>
+                                    <span class="connector-meta">Coming soon</span>
+                                </button>
+                                <button type="button" class="connector-option-btn disabled" disabled>
+                                    <span class="connector-icon">☕</span>
+                                    <strong>Oracle</strong>
+                                    <span class="connector-meta">Coming soon</span>
+                                </button>
+                                <button type="button" class="connector-option-btn disabled" disabled>
+                                    <span class="connector-icon">🍃</span>
+                                    <strong>MongoDB</strong>
                                     <span class="connector-meta">Coming soon</span>
                                 </button>
                             </div>
@@ -267,6 +297,139 @@
                                         <button type="submit" class="primary-btn full-width" style="margin-top:1.25rem;">Connect & Ingest Table</button>
                                     </div>
                                     <div id="postgresStatus" class="status-banner" style="margin-top:1rem;" hidden></div>
+                                </form>
+                            </div>
+                            
+                            <!-- MySQL Form -->
+                            <div class="connector-form-pane" id="pane-mysql" hidden>
+                                <div class="panel-head" style="padding-left:0; padding-right:0;">
+                                    <h3>MySQL Connection</h3>
+                                    <span class="panel-note">Connect to external database</span>
+                                </div>
+                                <form id="mysqlForm" class="postgres-form" novalidate>
+                                    <input type="hidden" id="mysqlEngine" value="mysql" />
+                                    <div class="form-row-2">
+                                        <div class="form-group">
+                                            <label for="mysqlHost">Host</label>
+                                            <input type="text" id="mysqlHost" placeholder="e.g. localhost or database.net" required />
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="mysqlPort">Port</label>
+                                            <input type="number" id="mysqlPort" value="3306" placeholder="3306" required />
+                                        </div>
+                                    </div>
+                                    <div class="form-row-2" style="margin-top:0.75rem;">
+                                        <div class="form-group">
+                                            <label for="mysqlUser">Username</label>
+                                            <input type="text" id="mysqlUser" placeholder="Username" required />
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="mysqlPassword">Password</label>
+                                            <input type="password" id="mysqlPassword" placeholder="••••••••" required />
+                                        </div>
+                                    </div>
+                                    <div class="form-group" style="margin-top:0.75rem;">
+                                        <label for="mysqlDatabase">Database Name</label>
+                                        <input type="text" id="mysqlDatabase" placeholder="e.g. sales_db" required />
+                                    </div>
+                                    <div class="postgres-action-row" style="margin-top:1.25rem; display:flex; gap:0.75rem;">
+                                        <button type="button" class="ghost-btn" id="mysqlTestBtn" style="flex:1;">Test Connection</button>
+                                        <button type="button" class="primary-btn" id="mysqlListTablesBtn" style="flex:1;" disabled>List Tables</button>
+                                    </div>
+                                    <div id="mysqlIngestSection" style="margin-top:1.5rem; padding-top:1.25rem; border-top:1px solid rgba(255,255,255,0.08);" hidden>
+                                        <div class="form-group">
+                                            <label for="mysqlTableSelect">Database Table</label>
+                                            <select id="mysqlTableSelect"></select>
+                                        </div>
+                                        <div class="form-group" style="margin-top:0.75rem;">
+                                            <label for="mysqlDatasetName">Dataset Name</label>
+                                            <input type="text" id="mysqlDatasetName" placeholder="e.g. Q3 Sales Data" />
+                                        </div>
+                                        <button type="submit" class="primary-btn full-width" style="margin-top:1.25rem;">Connect & Ingest Table</button>
+                                    </div>
+                                    <div id="mysqlStatus" class="status-banner" style="margin-top:1rem;" hidden></div>
+                                </form>
+                            </div>
+
+                            <!-- SQL Server Form -->
+                            <div class="connector-form-pane" id="pane-sqlserver" hidden>
+                                <div class="panel-head" style="padding-left:0; padding-right:0;">
+                                    <h3>SQL Server Connection</h3>
+                                    <span class="panel-note">Connect to SQL Server or Express</span>
+                                </div>
+                                <form id="sqlserverForm" class="postgres-form" novalidate>
+                                    <input type="hidden" id="sqlserverEngine" value="sqlserver" />
+                                    <div class="form-row-2">
+                                        <div class="form-group">
+                                            <label for="sqlserverServer">Server (Host\Instance)</label>
+                                            <input type="text" id="sqlserverServer" placeholder="e.g. localhost\SQLEXPRESS" required />
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="sqlserverDatabase">Database Name</label>
+                                            <input type="text" id="sqlserverDatabase" placeholder="e.g. sales_db" required />
+                                        </div>
+                                    </div>
+                                    <div class="form-group checkbox-label" style="margin-top:0.75rem; display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                        <input type="checkbox" id="sqlserverWindowsAuth" />
+                                        <label for="sqlserverWindowsAuth" style="margin: 0; color: var(--muted);">Use Windows Authentication</label>
+                                    </div>
+                                    <div class="form-row-2" style="margin-top:0.75rem;" id="sqlserverAuthGroup">
+                                        <div class="form-group">
+                                            <label for="sqlserverUser">Username</label>
+                                            <input type="text" id="sqlserverUser" placeholder="Username" />
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="sqlserverPassword">Password</label>
+                                            <input type="password" id="sqlserverPassword" placeholder="••••••••" />
+                                        </div>
+                                    </div>
+                                    <div class="postgres-action-row" style="margin-top:1.25rem; display:flex; gap:0.75rem;">
+                                        <button type="button" class="ghost-btn" id="sqlserverTestBtn" style="flex:1;">Test Connection</button>
+                                        <button type="button" class="primary-btn" id="sqlserverListTablesBtn" style="flex:1;" disabled>List Tables</button>
+                                    </div>
+                                    <div id="sqlserverIngestSection" style="margin-top:1.5rem; padding-top:1.25rem; border-top:1px solid rgba(255,255,255,0.08);" hidden>
+                                        <div class="form-group">
+                                            <label for="sqlserverTableSelect">Database Table</label>
+                                            <select id="sqlserverTableSelect"></select>
+                                        </div>
+                                        <div class="form-group" style="margin-top:0.75rem;">
+                                            <label for="sqlserverDatasetName">Dataset Name</label>
+                                            <input type="text" id="sqlserverDatasetName" placeholder="e.g. Q3 Sales Data" />
+                                        </div>
+                                        <button type="submit" class="primary-btn full-width" style="margin-top:1.25rem;">Connect & Ingest Table</button>
+                                    </div>
+                                    <div id="sqlserverStatus" class="status-banner" style="margin-top:1rem;" hidden></div>
+                                </form>
+                            </div>
+
+                            <!-- SQLite Form -->
+                            <div class="connector-form-pane" id="pane-sqlite" hidden>
+                                <div class="panel-head" style="padding-left:0; padding-right:0;">
+                                    <h3>SQLite Connection</h3>
+                                    <span class="panel-note">Connect to local database file</span>
+                                </div>
+                                <form id="sqliteForm" class="postgres-form" novalidate>
+                                    <input type="hidden" id="sqliteEngine" value="sqlite" />
+                                    <div class="form-group">
+                                        <label for="sqliteDbPath">Absolute Database Path</label>
+                                        <input type="text" id="sqliteDbPath" placeholder="/var/data/my_db.sqlite3" required />
+                                    </div>
+                                    <div class="postgres-action-row" style="margin-top:1.25rem; display:flex; gap:0.75rem;">
+                                        <button type="button" class="ghost-btn" id="sqliteTestBtn" style="flex:1;">Test Connection</button>
+                                        <button type="button" class="primary-btn" id="sqliteListTablesBtn" style="flex:1;" disabled>List Tables</button>
+                                    </div>
+                                    <div id="sqliteIngestSection" style="margin-top:1.5rem; padding-top:1.25rem; border-top:1px solid rgba(255,255,255,0.08);" hidden>
+                                        <div class="form-group">
+                                            <label for="sqliteTableSelect">Database Table</label>
+                                            <select id="sqliteTableSelect"></select>
+                                        </div>
+                                        <div class="form-group" style="margin-top:0.75rem;">
+                                            <label for="sqliteDatasetName">Dataset Name</label>
+                                            <input type="text" id="sqliteDatasetName" placeholder="e.g. Q3 Sales Data" />
+                                        </div>
+                                        <button type="submit" class="primary-btn full-width" style="margin-top:1.25rem;">Connect & Ingest Table</button>
+                                    </div>
+                                    <div id="sqliteStatus" class="status-banner" style="margin-top:1rem;" hidden></div>
                                 </form>
                             </div>
                         </article>
