@@ -271,30 +271,35 @@ See `.env.example` for full list.
 
 ```bash
 python manage.py check
-python manage.py test analytics_assistant   # 31 tests
+python manage.py test
 ```
 
-Test categories: schema, URL safety, analytics engines, dataset pipeline, chat scoping, API integration.
+See [TESTING.md](./TESTING.md) for full detail on unit, integration, and security test packages.
 
 ---
 
 ## 12. Related Documents
 
 | Document | Purpose |
-|----------|---------|
-| `docs/STABILIZATION.md` | ADR log (Iterations 1–3) |
-| `docs/TECHNICAL_DEBT.md` | Known issues register |
-| `docs/PHASE1_RETROSPECTIVE.md` | Phase 1 summary |
-| `docs/SECURITY.md` | SSRF and production security notes |
+|---|---|
+| [README.md](../README.md) | Main project setup, overview, and quick-start instructions |
+| [SECURITY.md](./SECURITY.md) | SSRF safety, credential encryption, and rate limiting controls |
+| [SYSTEM_DESIGN.md](./SYSTEM_DESIGN.md) | Technical lifecycle diagrams and pipeline architecture |
+| [CONNECTOR_GUIDE.md](./CONNECTOR_GUIDE.md) | Universal Connector Framework developer integration guide |
+| [API_REFERENCE.md](./API_REFERENCE.md) | REST API JSON endpoints, parameters, and payloads guide |
+| [ROADMAP.md](./ROADMAP.md) | Planned iterations, completed phases, and deferred tasks |
+| [PROJECT_HISTORY.md](./PROJECT_HISTORY.md) | Chronological version milestones timeline and decisions history |
+| [STABILIZATION.md](./STABILIZATION.md) | ADR decision history log |
+| [TECHNICAL_DEBT.md](./TECHNICAL_DEBT.md) | Known issues register |
 
 ---
 
-## 13. Phase 1 Module Count
+## 13. Project Module Count
 
 | Category | Files |
-|----------|-------|
-| Backend Python modules | 22 (excl. migrations/tests) |
-| Migrations | 4 |
+|---|---|
+| Backend Python modules | 27 (excl. migrations/tests) |
+| Migrations | 11 |
 | Frontend assets | 3 (HTML, CSS, JS) |
-| Documentation | 5 |
-| **Total project files** | ~47 |
+| Documentation files | 14 |
+| **Total project files** | ~55 |

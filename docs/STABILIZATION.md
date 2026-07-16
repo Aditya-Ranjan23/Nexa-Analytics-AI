@@ -281,6 +281,48 @@ Phase 1 stabilization is **complete** (Release Candidate).
 
 ---
 
+### ADR-024: Request-scoped Workspace isolation
+**Decision:** Introduce `Workspace` model and FK relationships on dataset uploads, dashboard states, and chat sessions. Scope active workspaces using request-level resolution helpers.
+**Why:** Grouping files under workspace parameters isolates concurrent projects and prepares the database for multi-user sharing.
+**Impact:** Safe project container boundaries established.
+
+---
+
+### ADR-025: Symmetric AES credentials encryption
+**Decision:** Encrypt connector credentials in JSON fields using symmetric Fernet key derivation backed by `settings.SECRET_KEY`. Decrypt only in-memory.
+**Why:** Storing external database passwords in plain text presents high compliance and attack risks.
+**Impact:** Closed Postgres credential exposure pathways.
+
+---
+
+### ADR-026: Anomaly severity sorting prioritization
+**Decision:** Calculate prioritized severity weights (`critical`, `high`, `medium`, `low`) for daily metric anomalies based on deviation variance.
+**Why:** Displaying random anomaly lists causes alert fatigue. Prioritized alerts highlight high-impact business metrics immediately.
+**Impact:** Alerts sorted by severity on the dashboard.
+
+---
+
+### ADR-027: Chronological Sub-Segment drivers analysis
+**Decision:** Group aggregate metric spikes by categorical attributes to identify which driver (e.g. channel) contributed the highest percentage share of the shift.
+**Why:** Spotting an anomaly is helpful, but diagnosing the main root-cause category driver immediately saves debugging time.
+**Impact:** Surfaced driver categories and share percentages.
+
+---
+
+### ADR-028: Flat Trend contradiction filtering
+**Decision:** Mute volatility flags deterministically when Daily metric averages reflect a statistically flat trend.
+**Why:** Unfiltered AI generations returned confusing, contradictory statements (e.g. a flat trend with high daily changes).
+**Impact:** Clean, consistent memo summary text.
+
+---
+
+### ADR-029: In-Memory Ingestion Caching
+**Decision:** Cache computed anomalies payload summaries inside `insights_cache` field. Evacuate cache when uploading versions or running manual synchronizations.
+**Why:** Computing statistical anomalies and LLM prompts on every page load causes request latency.
+**Impact:** Dashboard loads in under 100ms on cached hits.
+
+---
+
 ## Verification Commands
 
 ```bash

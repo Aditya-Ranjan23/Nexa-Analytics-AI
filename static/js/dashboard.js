@@ -307,13 +307,33 @@ function normalizeKpiCards(data) {
 function renderKpis(data) {
     const cards = normalizeKpiCards(data);
     if (!cards.length) {
-        kpiGrid.innerHTML = `<article class="kpi-card"><div class="label">Status</div><div class="value">No data</div></article>`;
+        kpiGrid.innerHTML = `
+            <article class="kpi-card" style="padding: var(--space-md); text-align: center;">
+                <div class="label" style="font-size: 0.8rem; text-transform: uppercase;">Status</div>
+                <div class="value" style="font-size: 1.5rem; font-weight: 700; margin-top: 0.35rem;">No data</div>
+            </article>`;
         return;
     }
+    
     kpiGrid.innerHTML = cards
         .map(
-            (card) =>
-                `<article class="kpi-card"><div class="label">${card.label}</div><div class="value">${formatKpiValue(card)}</div></article>`
+            (card) => {
+                let icon = "📊";
+                if (card.label.toLowerCase().includes("revenue") || card.label.toLowerCase().includes("sales")) icon = "💰";
+                else if (card.label.toLowerCase().includes("profit")) icon = "📈";
+                else if (card.label.toLowerCase().includes("spend") || card.label.toLowerCase().includes("cost")) icon = "💸";
+                else if (card.label.toLowerCase().includes("rate") || card.label.toLowerCase().includes("ratio")) icon = "🎯";
+                
+                return `
+                    <article class="kpi-card">
+                        <div class="kpi-card-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                            <span class="label">${card.label}</span>
+                            <span class="kpi-icon" style="font-size: 1.1rem; opacity: 0.85;">${icon}</span>
+                        </div>
+                        <div class="value" style="margin-top: 0.2rem;">${formatKpiValue(card)}</div>
+                    </article>
+                `;
+            }
         )
         .join("");
 }
@@ -466,11 +486,20 @@ async function renderProactiveInsights(insights, data) {
                     totalFormatted = totalVal.toLocaleString(undefined, { maximumFractionDigits: 1 });
                 }
                 
+                let icon = "📊";
+                if (label.toLowerCase().includes("revenue") || label.toLowerCase().includes("sales")) icon = "💰";
+                else if (label.toLowerCase().includes("profit")) icon = "📈";
+                else if (label.toLowerCase().includes("spend") || label.toLowerCase().includes("cost")) icon = "💸";
+                else if (label.toLowerCase().includes("rate") || label.toLowerCase().includes("ratio")) icon = "🎯";
+                
                 return `
-                    <article class="kpi-card mini" style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); padding: 0.85rem; border-radius: 8px; display: flex; flex-direction: column; gap: 0.35rem;">
-                        <span class="label" style="font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;">Total ${label}</span>
-                        <span class="value" style="font-size: 1.25rem; font-weight: 700; color: var(--accent);">${totalFormatted}</span>
-                        <span class="sub" style="font-size: 0.7rem; color: var(--muted);">Avg: ${avgVal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                    <article class="kpi-card mini" style="padding: 1rem 1.15rem; gap: 0.25rem;">
+                        <div class="kpi-card-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                            <span class="label" style="font-size: 0.72rem;">Total ${label}</span>
+                            <span class="kpi-icon" style="font-size: 0.95rem;">${icon}</span>
+                        </div>
+                        <span class="value" style="font-size: 1.3rem; margin-top: 0.15rem; color: var(--text);">${totalFormatted}</span>
+                        <span class="sub" style="font-size: 0.72rem; color: var(--muted); font-weight: 500;">Avg: ${avgVal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
                     </article>
                 `;
             }).join('');
@@ -612,9 +641,33 @@ async function renderProactiveInsights(insights, data) {
     if (listRecs) {
         const recs = narratives.recommendations || [];
         if (recs.length === 0) {
-            listRecs.innerHTML = '<li class="empty-state" style="color: var(--muted); font-size: 0.88rem;">No business actions recommended for this dataset.</li>';
+            listRecs.innerHTML = '<div class="empty-state" style="color: var(--muted); font-size: 0.88rem;">No business actions recommended for this dataset.</div>';
         } else {
-            listRecs.innerHTML = recs.map(r => `<li>${r}</li>`).join('');
+            listRecs.innerHTML = recs.map(r => {
+                let fact = "";
+                let rec = "";
+                let spec = "";
+                
+                const factIdx = r.indexOf("Fact:");
+                const recIdx = r.indexOf("Recommendation:");
+                const specIdx = r.indexOf("Speculation:");
+                
+                if (factIdx !== -1 && recIdx !== -1 && specIdx !== -1) {
+                    fact = r.substring(factIdx + 5, recIdx).trim();
+                    rec = r.substring(recIdx + 15, specIdx).trim();
+                    spec = r.substring(specIdx + 12).trim();
+                } else {
+                    rec = r;
+                }
+                
+                return `
+                    <div class="recommendation-card" style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); padding: 1.1rem 1.25rem; border-radius: 8px; display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.75rem; text-align: left; transition: all 0.2s ease;">
+                        ${fact ? `<div style="font-size: 0.82rem; color: var(--muted); line-height: 1.45;"><span style="text-transform: uppercase; font-weight: 700; color: var(--accent-alt); font-size: 0.7rem; margin-right: 0.5rem; letter-spacing: 0.05em; background: rgba(6, 182, 212, 0.1); padding: 0.1rem 0.35rem; border-radius: 4px;">Fact</span>${fact}</div>` : ''}
+                        <div style="font-size: 0.88rem; font-weight: 600; color: var(--text); line-height: 1.45;"><span style="text-transform: uppercase; font-weight: 700; color: var(--accent); font-size: 0.7rem; margin-right: 0.5rem; letter-spacing: 0.05em; background: rgba(139, 92, 246, 0.1); padding: 0.1rem 0.35rem; border-radius: 4px;">Action</span>${rec}</div>
+                        ${spec ? `<div style="font-size: 0.82rem; color: var(--muted); font-style: italic; line-height: 1.45;"><span style="text-transform: uppercase; font-weight: 700; color: #fb923c; font-size: 0.7rem; margin-right: 0.5rem; font-style: normal; letter-spacing: 0.05em; background: rgba(251, 146, 60, 0.1); padding: 0.1rem 0.35rem; border-radius: 4px;">Speculation</span>${spec}</div>` : ''}
+                    </div>
+                `;
+            }).join('');
         }
     }
 
@@ -718,6 +771,26 @@ function applyDashboardData(data) {
 }
 
 async function loadDashboard() {
+    if (kpiGrid) {
+        kpiGrid.innerHTML = Array(4).fill(0).map(() => `
+            <article class="kpi-card mini" style="padding: var(--space-md); gap: 0.35rem; display: flex; flex-direction: column;">
+                <div style="height: 12px; width: 60%; background: rgba(255,255,255,0.04); border-radius: 4px; animation: loadingSkeleton 1.6s infinite linear;"></div>
+                <div style="height: 24px; width: 40%; background: rgba(255,255,255,0.06); border-radius: 4px; margin-top: 0.25rem; animation: loadingSkeleton 1.6s infinite linear;"></div>
+            </article>
+        `).join('');
+    }
+    if (chartsGrid) {
+        chartsGrid.innerHTML = Array(2).fill(0).map(() => `
+            <article class="panel chart-panel" style="min-height: 320px; display: flex; flex-direction: column;">
+                <div class="panel-head">
+                    <div style="height: 14px; width: 40%; background: rgba(255,255,255,0.04); border-radius: 4px; animation: loadingSkeleton 1.6s infinite linear;"></div>
+                </div>
+                <div class="chart-wrap" style="flex: 1; padding: 1rem;">
+                    <div class="chart-skeleton"></div>
+                </div>
+            </article>
+        `).join('');
+    }
     try {
         const response = await apiFetch("/api/analytics/summary/");
         if (!response.ok) throw new Error(`Summary API failed (${response.status})`);

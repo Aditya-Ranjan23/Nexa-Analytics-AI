@@ -438,7 +438,7 @@ class HealthCheckTests(TestCase):
         response = self.client.get("/health/")
         data = response.json()
         self.assertIn("version", data)
-        self.assertEqual(data["version"], "0.6.0")
+        self.assertEqual(data["version"], "0.7.0")
 
     def test_health_check_includes_database_check(self):
         response = self.client.get("/health/")

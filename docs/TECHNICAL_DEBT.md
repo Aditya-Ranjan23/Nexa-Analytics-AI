@@ -1,8 +1,8 @@
-# Technical Debt Register — Phase 1 RC
+# Technical Debt Register (v0.7.0)
 
 **Project:** Nexa Analytics AI Assistant  
-**Register date:** 2026-07-13  
-**Status:** Active — review before Phase 2 kickoff
+**Register date:** 2026-07-16  
+**Status:** Active — review before Phase 8 kickoff
 
 Severity scale: **Critical** · **High** · **Medium** · **Low**
 

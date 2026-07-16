@@ -1,6 +1,6 @@
-# Nexa Analytics — Connector Developer Guide
+# Universal Connector Developer Guide (v0.7.0)
 
-This document describes how the Universal Connector Framework is designed and how to add new data source connectors to Nexa Analytics.
+This developer guide describes the architecture of the Universal Connector Framework and how to add new data source connectors to Nexa Analytics.
 
 ---
 
@@ -36,10 +36,10 @@ password = decrypt_password(config.get("password", ""))
 
 ## 3. Developing a New Connector
 
-To introduce a new database connector (e.g. MySQL, SQLite):
+To introduce a new database connector (e.g. MySQL, Snowflake):
 
 ### Step 3.1: Update Models
-Extend `DatasetUpload.SOURCE_CHOICES` in `models.py` with the new type choice:
+Extend `DatasetUpload.SOURCE_CHOICES` in [models.py](file:///d:/.Study/pep%20class/Django/ai_assistant/analytics_assistant/models.py) with the new type choice:
 ```python
 SOURCE_CHOICES = (
     ("file", "File"),
@@ -50,7 +50,7 @@ SOURCE_CHOICES = (
 ```
 
 ### Step 3.2: Implement Connector Client
-Add connection, test, discovery, and query helper methods inside `connector_pipeline.py`:
+Add connection, test, discovery, and query helper methods inside [connector_pipeline.py](file:///d:/.Study/pep%20class/Django/ai_assistant/analytics_assistant/connector_pipeline.py):
 ```python
 def test_mysql_connection(config: dict) -> tuple[bool, str]:
     # 1. Decrypt password
@@ -60,7 +60,7 @@ def test_mysql_connection(config: dict) -> tuple[bool, str]:
 ```
 
 ### Step 3.3: Map Synchronization Hook
-Extend `sync_dataset_source` in `connector_pipeline.py` to route to the new client query method when triggering refreshes:
+Extend `sync_dataset_source` in [connector_pipeline.py](file:///d:/.Study/pep%20class/Django/ai_assistant/analytics_assistant/connector_pipeline.py) to route to the new client query method when triggering refreshes:
 ```python
 elif source_type == "mysql":
     # 1. Fetch MySQL DataFrame

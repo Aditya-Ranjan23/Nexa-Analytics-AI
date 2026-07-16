@@ -1,115 +1,93 @@
 # Nexa Analytics AI Assistant
 
-**v0.2.0 Developer Preview** — Phase 1.5 Complete
+**v0.7.0 Release** — Intelligent Analytics Engine + Premium SaaS UX
 
-AI-powered analytics dashboard backed by Django, NVIDIA AI, and a modular analytics engine.
+Nexa Analytics is a premium AI-powered Business Intelligence (BI) dashboard backed by Django, NVIDIA AI NIM, and a highly modular analytics engine. It automatically identifies anomalies, computes category drivers, and calculates business impact metrics, delivering interactive business analyst memo reports immediately upon dataset connection.
 
-## Features
+---
 
-- Full Django backend with analytics and AI chat APIs
-- Modern dashboard frontend with KPI cards, trend chart, and assistant chat
-- NVIDIA `build.nvidia.com` integration-ready service layer (falls back to local response)
-- Session-based chat memory persisted in DB
-- Dataset upload (CSV/Excel) with auto schema detection and AI dashboard blueprint
-- URL-ingested datasets with SSRF protection (DNS-aware + redirect-chain validation)
-- Pluggable analytics datasource layer (CSV, PostgreSQL)
-- API rate limiting on all resource-intensive endpoints (configurable)
-- Anonymous session isolation via browser session key binding
+## 🚀 Key Features
 
-## Security Posture (Phase 1.5)
+### 📈 Intelligent Analytics Engine (v0.7.0)
+- **Prioritized Anomalies**: Automatically identifies and prioritizes business metrics deviations using custom severity weights (`critical`, `high`, `medium`, `low`).
+- **Category Drivers**: Isolates date spikes and drops down to specific channel components using Chronological Sub-Segment Analysis.
+- **Business Impact Math**: Computes metrics coverage gap ratios, daily deviation variances, and shift magnitudes.
+- **Narrative Coherence**: Resolves contradictory insights (e.g. flat daily trends vs. volatile metrics) in-memory before generating reports.
 
-- SSRF: DNS-aware URL validation + redirect-chain re-validation
-- Upload: file size limit (25 MB default), MIME type check
-- Sessions: anonymous sessions bound to Django session key
-- Production: fail-fast on insecure SECRET_KEY, DEBUG=True, or wildcard ALLOWED_HOSTS
-- Rate limiting: DRF throttle classes on chat, upload, and ingestion endpoints
+### 🗄️ Dataset & Version Control Library
+- **Dataset Catalog**: Supports connection, activation, archiving, and deletion of multiple datasets.
+- **Immutable Version History**: Snapshots dataset schemas, row counts, and blueprints under specific version number indexes.
+- **Version Comparisons**: Automatically analyzes statistical distribution shifts and column changes between snapshots, and supports instant rollback restoring.
 
-## Quick Start
+### 🔌 Universal Connector Framework
+- **PostgreSQL Ingestion**: Syncs data tables directly to the ingestion pipeline.
+- **Symmetric Encryption**: Protects credentials in-memory using AES-256 (Fernet) backed by a 32-byte key generated from `settings.SECRET_KEY`.
 
+### 🛡️ Production Hardening & Security
+- **SSRF Safety**: DNS-aware validation blocks requests to private/loopback RFC1918 subnets and resolves hostnames before fetching. Attaches hooks to intercept redirect loops.
+- **Environment Checks**: Boot fails immediately under staging/production if default secrets or `DEBUG=True` are detected.
+- **Rate Limiting**: DRF throttling classes protect endpoints against abuse.
+
+---
+
+## 🛠️ Quick Start
+
+### 1. Install dependencies
+Ensure you are using python 3.10+ and run:
 ```bash
-# 1. Install dependencies
 pip install -r requirements.txt
-
-# 2. Configure environment
-cp .env.example .env
-# Set NVIDIA_API_KEY from build.nvidia.com (optional)
-
-# 3. Run migrations
-python manage.py migrate
-
-# 4. Start server
-python manage.py runserver
-
-# 5. Open
-# http://127.0.0.1:8000/
 ```
 
-## API Endpoints
+### 2. Configure environment
+Create a local config file:
+```bash
+cp .env.example .env
+# Optional: Set NVIDIA_API_KEY from build.nvidia.com for AI summaries
+```
+
+### 3. Run migrations & start server
+```bash
+python manage.py migrate
+python manage.py runserver
+```
+Open **[http://127.0.0.1:8000/](http://127.0.0.1:8000/)** in your browser.
+
+---
+
+## 📋 REST API Summary
 
 | Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/analytics/summary/` | KPIs, trends, channel performance |
-| `POST` | `/api/chat/` | AI chat — body: `{"message": "...", "session_id": 12}` |
-| `POST` | `/api/data/upload/` | Multipart CSV/Excel upload with auto schema detection |
-| `POST` | `/api/data/upload-link/` | JSON `{"url": "https://..."}` to ingest remote dataset |
-| `POST` | `/api/ingestion/run/` | Manual ingestion job trigger |
-| `GET/POST` | `/api/dashboard/blueprint/` | Load/save dashboard blueprint override |
-| `GET` | `/health/` | Liveness + DB readiness check (503 on DB failure) |
+|---|---|---|
+| `GET` | `/api/analytics/summary/` | Active dashboard statistics, prioritized anomalies, and KPI lists |
+| `POST` | `/api/chat/` | Assistant chat with session-based memory lookup |
+| `POST` | `/api/data/upload/` | Upload CSV/Excel files with schema profiling |
+| `POST` | `/api/data/upload-link/` | Ingest datasets from secure HTTP links |
+| `GET` | `/api/data/datasets/` | List datasets available inside the workspace |
+| `POST` | `/api/data/connectors/test/` | Test connection credentials verification for database targets |
+| `GET` | `/health/` | Health check endpoint returning database liveness (returns 503 on database drop) |
 
-## Configuration
+For complete payloads, request variables, and schema models, see the [API Reference Guide](docs/API_REFERENCE.md).
 
-See [`.env.example`](.env.example) for all available settings.
+---
 
-Key environment variables:
+## 🧪 Running Tests
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DJANGO_ENV` | `development` | `development` / `staging` / `production` |
-| `DJANGO_SECRET_KEY` | dev-only placeholder | **Required in production** |
-| `NVIDIA_API_KEY` | _(empty)_ | Optional — AI falls back without it |
-| `MAX_UPLOAD_MB` | `25` | Upload size limit in MB |
-| `THROTTLE_CHAT_ANON_RATE` | `20/minute` | Chat rate limit for anonymous users |
-
-## Project Structure
-
-```
-config/              Django project config (settings, URLs, env validation)
-analytics_assistant/ Backend app (views, analytics engines, services, tests)
-  ├── analytics.py   Analytics facade
-  ├── chart_engine.py Chart data builder
-  ├── kpi_engine.py  KPI computation
-  ├── insights_engine.py Insight generation
-  ├── upload_service.py File/URL dataset ingestion
-  ├── url_safety.py  SSRF guard with DNS + redirect validation
-  ├── throttles.py   DRF scoped rate limit classes
-  ├── services.py    NVIDIA AI service layer
-  ├── models.py      ChatSession, DatasetUpload, DashboardState, IngestionJob
-  └── tests.py       71 automated tests
-templates/           Dashboard HTML
-static/              CSS + JS
-data/sales_data.csv  Seed dataset (HR analytics, zero-config fallback)
-docs/                Architecture, security, deployment, debt register, changelog
-.github/workflows/   CI/CD (GitHub Actions)
-```
-
-## Documentation
-
-| Document | Description |
-|----------|-------------|
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture and ADRs |
-| [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Production deployment guide |
-| [SECURITY.md](docs/SECURITY.md) | Security model and checklist |
-| [TECHNICAL_DEBT.md](docs/TECHNICAL_DEBT.md) | Known limitations and Phase 2 roadmap |
-| [CHANGELOG.md](docs/CHANGELOG.md) | Version history |
-
-## Dataset Modes
-
-- **Ads mode** — requires `date, channel, revenue, orders, ad_spend, conversion_rate`
-- **Generic mode** — accepts any dataset with 2+ columns
-
-## Running Tests
-
+Verify code stability and security gates by running:
 ```bash
-python manage.py test --verbosity=2
-# 71 tests
+python manage.py test
+# 99 tests (100% green)
 ```
+
+---
+
+## 📚 Documentation Index
+
+The complete project documentation is located under `/docs`:
+
+- 🏛️ **[System Architecture](docs/ARCHITECTURE.md)** — Core modules reference and ADR records.
+- ⚙️ **[Technical Design](docs/SYSTEM_DESIGN.md)** — Request lifecycles, schemas, and Mermaid flowcharts.
+- 🛡️ **[Security Control](docs/SECURITY.md)** — SSRF filters, encryption logic, and checklist.
+- 🌐 **[Connectors Guide](docs/CONNECTOR_GUIDE.md)** — Guide for creating new connectors.
+- 🕒 **[Version History](docs/PROJECT_HISTORY.md)** — Chronological release timeline log.
+- 🗺️ **[Product Roadmap](docs/ROADMAP.md)** — Upcoming milestones and technical debt paydowns.
+- 📋 **[Documentation Index](docs/README.md)** — Directory table pointing to phase retrospectives.

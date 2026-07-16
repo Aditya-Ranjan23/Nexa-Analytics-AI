@@ -1,113 +1,84 @@
-# Deployment Guide — Nexa Analytics v0.2.0 (Phase 1.5)
+# Deployment Guide (v0.7.0)
 
-## Environments
-
-| `DJANGO_ENV` | Purpose | Validation |
-|--------------|---------|------------|
-| `development` | Local dev (default) | Permissive — insecure defaults allowed |
-| `staging` | Pre-production | Strict — same rules as production |
-| `production` | Live deploy | Strict |
-
-Startup validation runs from `config/env_validation.py` when settings load. Django will **refuse to start** in staging/production if any security constraint is violated.
+This guide documents the procedures, environment controls, and verification steps required to deploy Nexa Analytics AI to production.
 
 ---
 
-## Development (default)
+## 1. Environments & Context
 
-```bash
-cp .env.example .env
-python manage.py migrate
-python manage.py runserver
-```
+Configuration behavior is governed by the `DJANGO_ENV` parameter variable:
 
-No `DJANGO_ENV` required (defaults to `development`).
+| Environment | Mode | Access | Constraints Enforcement |
+|---|---|---|---|
+| **`development`** | Dev | Local | Permissive configuration, insecure secrets allowed (default) |
+| **`staging`** | Test | Server | Strict security validation checks |
+| **`production`** | Live | Public | Strict security validation checks, SSL required |
+
+Target configuration checks run automatically on startup inside `config/env_validation.py`. The application will **throw an exception and refuse to boot** if any configuration gate is violated.
 
 ---
 
-## Production
+## 2. Environment Variables Specification
 
-### 1. Environment variables
+The following variables must be configured in production environments:
 
 ```bash
 DJANGO_ENV=production
 DEBUG=False
-DJANGO_SECRET_KEY=<50+ character random string>
-ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
+DJANGO_SECRET_KEY=<50+ character unique cryptographic secret string>
+ALLOWED_HOSTS=analytics.nexa.example.com,nexa.example.com
+NVIDIA_API_KEY=<NVIDIA API NIM authorization key>
 LOG_LEVEL=WARNING
-MAX_UPLOAD_MB=25
 ```
 
-Generate a secret key:
-
+### Secret Key Generation
+Generate a cryptographically safe production key:
 ```bash
 python -c "import secrets; print(secrets.token_urlsafe(64))"
 ```
 
-### 2. Rate limit tuning (optional)
+---
 
-Override default throttle rates via environment:
+## 3. Production Deployment Commands
 
-```bash
-THROTTLE_ANON_RATE=30/minute
-THROTTLE_CHAT_ANON_RATE=10/minute
-THROTTLE_UPLOAD_ANON_RATE=5/minute
-```
-
-See `.env.example` for all available knobs.
-
-### 3. Settings module
+Execute the following setup commands inside the build environment:
 
 ```bash
+# 1. Export settings target
 export DJANGO_SETTINGS_MODULE=config.settings_production
-```
 
-`settings_production.py` sets `DJANGO_ENV=production` and `DEBUG=False` before loading base settings.
-
-### 4. Deploy steps
-
-```bash
+# 2. Run system configuration checks
 python manage.py check --deploy
+
+# 3. Apply database schema migrations
 python manage.py migrate
+
+# 4. Consolidate static layout assets
 python manage.py collectstatic --noinput
-gunicorn config.wsgi:application
+
+# 5. Launch application via WSGI runner
+gunicorn config.wsgi:application --bind 0.0.0.0:8000
 ```
-
-### 5. Fail-fast behavior
-
-If `DJANGO_ENV` is `production` or `staging` and any of these are true, **Django will not start**:
-
-- `DEBUG=True`
-- `DJANGO_SECRET_KEY` missing, too short, or a known placeholder
-- `ALLOWED_HOSTS` is `*` or empty
 
 ---
 
-## Health check
+## 4. Application Health Check
+
+Verify status endpoints for system liveness checks:
 
 ```bash
 curl http://127.0.0.1:8000/health/
-# {"status": "ok", "version": "0.2.0", "checks": {"database": "ok"}}
+# {"status": "ok", "version": "0.7.0", "checks": {"database": "ok"}}
 ```
-
-- Returns `200` when app and DB are healthy
-- Returns `503` when the DB is unreachable (suitable for load-balancer / k8s readiness probes)
-
----
-
-## CI/CD
-
-GitHub Actions workflow at `.github/workflows/ci.yml` runs on every push/PR:
-
-1. **Django system checks** — `manage.py check --fail-level WARNING`
-2. **Migrations** — `manage.py migrate`
-3. **Tests** — `manage.py test analytics_assistant`
-4. **Lint** — `flake8` syntax/undefined-name gate
-5. **Deploy check** — `manage.py check --deploy --settings=config.settings_production`
+- Returns **`200 OK`** if the SQLite/PostgreSQL database connections resolve.
+- Returns **`503 Service Unavailable`** if the database ping fails (ideal for load-balancer probes).
 
 ---
 
-## Related docs
+## 5. Continuous Integration (CI/CD)
 
-- [SECURITY.md](./SECURITY.md) — SSRF, upload, rate limiting, session security
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — system overview
-- [TECHNICAL_DEBT.md](./TECHNICAL_DEBT.md) — known limitations and roadmap
+The GitHub Actions build workflow (`.github/workflows/ci.yml`) executes the following checks on every pull request:
+1. **Django System Check**: Runs `manage.py check --fail-level WARNING`.
+2. **Migrations Check**: Verifies migration files compile cleanly.
+3. **Automated Tests**: Runs `manage.py test` to ensure all 99 tests pass.
+4. **Deploy Checks**: Executes `manage.py check --deploy --settings=config.settings_production`.

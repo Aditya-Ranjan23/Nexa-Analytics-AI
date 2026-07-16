@@ -601,7 +601,7 @@ def health_check(request):
 
     payload = {
         "status": "ok" if db_ok else "degraded",
-        "version": "0.6.0",
+        "version": "0.7.0",
         "checks": {
             "database": "ok" if db_ok else f"error: {db_error}",
         },
