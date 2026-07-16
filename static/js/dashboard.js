@@ -556,12 +556,21 @@ async function renderProactiveInsights(insights, data) {
                 else if (a.type === "outliers") icon = "🚨";
                 
                 const confPct = Math.round((a.confidence || 0) * 100);
+                const severity = a.severity || "info";
+                const badgeColor = severity === "critical" ? "#ef4444" : severity === "high" ? "#f97316" : severity === "medium" ? "#eab308" : "#3b82f6";
+                const badgeBg = severity === "critical" ? "rgba(239, 68, 68, 0.15)" : severity === "high" ? "rgba(249, 115, 22, 0.15)" : severity === "medium" ? "rgba(234, 179, 8, 0.15)" : "rgba(59, 130, 246, 0.15)";
+                
                 return `
                     <div class="anomaly-row ${a.type}">
                         <div class="anomaly-icon">${icon}</div>
-                        <div class="anomaly-content">
-                            <span class="anomaly-msg">${a.message}</span>
-                            <div class="anomaly-meta">
+                        <div class="anomaly-content" style="width: 100%;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; width: 100%;">
+                                <span class="anomaly-msg" style="font-weight: 600; color: var(--text);">${a.message}</span>
+                                <span class="severity-badge" style="font-size: 0.7rem; padding: 0.15rem 0.4rem; border-radius: 4px; font-weight: 700; text-transform: uppercase; background: ${badgeBg}; color: ${badgeColor}; border: 1px solid ${badgeColor}33; display: inline-block;">${severity}</span>
+                            </div>
+                            ${a.why_happened ? `<p style="margin: 0.25rem 0 0; font-size: 0.8rem; color: var(--muted); line-height: 1.4;"><strong>Driver:</strong> ${a.why_happened}</p>` : ''}
+                            ${a.business_impact ? `<p style="margin: 0.35rem 0 0; font-size: 0.78rem; font-weight: 600; color: #fde047;">📊 Impact: ${a.business_impact}</p>` : ''}
+                            <div class="anomaly-meta" style="margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
                                 <span>Confidence: ${confPct}%</span>
                                 <div class="confidence-bar-wrap">
                                     <div class="confidence-track">

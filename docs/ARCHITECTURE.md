@@ -1,6 +1,6 @@
-# Nexa Analytics AI Assistant — Architecture (v0.6.0)
+# Nexa Analytics AI Assistant — Architecture (v0.7.0)
 
-**Version:** v0.6.0 – Universal Connector Framework  
+**Version:** v0.7.0 – Intelligent Analytics Engine  
 **Stack:** Django 6 · DRF · Pandas · SQLite · Chart.js · NVIDIA API · Cryptography  
 **Last updated:** 2026-07-15
 
@@ -89,6 +89,7 @@ Phase 1 focused on **stabilization**: no new product features; hardening archite
 | Module | Responsibility |
 |--------|----------------|
 | `analytics.py` | Public facade: `build_analytics_payload`, mode routing (ads vs generic) |
+| `intelligent_analytics.py` | Proactive business analyst engine: calculates statistics, anomalies, trends, root cause attributions, recommendations, suggested questions |
 | `kpi_engine.py` | KPI card construction, format inference, clamping |
 | `chart_engine.py` | Line/bar/doughnut specs, time series, chart fallbacks |
 | `insights_engine.py` | Rule-based insight cards (ads + generic) |

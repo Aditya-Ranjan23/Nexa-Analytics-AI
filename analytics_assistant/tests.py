@@ -1271,6 +1271,20 @@ class IntelligentAnalyticsTests(TestCase):
         
         anom_types = [a["type"] for a in res["anomalies"]]
         self.assertIn("outliers", anom_types)
+        
+        # Verify the new keys exist on anomalies
+        for a in res["anomalies"]:
+            self.assertIn("severity", a)
+            self.assertIn("business_impact", a)
+            self.assertIn("why_happened", a)
+            
+        # Verify severity sorting (critical -> high -> medium -> low)
+        weights = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+        prev_weight = 5
+        for a in res["anomalies"]:
+            curr_weight = weights.get(a["severity"], 1)
+            self.assertTrue(curr_weight <= prev_weight, f"Anomalies not ranked correctly by severity: {curr_weight} > {prev_weight}")
+            prev_weight = curr_weight
 
     def test_insights_caching_on_version(self):
         self.assertEqual(self.version.insights_cache, {})
@@ -1312,6 +1326,141 @@ class IntelligentAnalyticsTests(TestCase):
         data = response.json()
         self.assertEqual(data["v1"]["narratives"]["executive_summary"], "Version 1 Summary")
         self.assertEqual(data["v2"]["narratives"]["executive_summary"], "Version 2 Summary")
+
+    def test_schema_change_detection(self):
+        import pandas as pd
+        from analytics_assistant.intelligent_analytics import run_intelligent_analytics
+        
+        dataset = DatasetUpload.objects.create(
+            name="Schema Test Dataset",
+            source_type="file",
+            active_version_number=2,
+        )
+        v1 = DatasetVersion.objects.create(
+            dataset=dataset,
+            version_number=1,
+            source_type="file",
+            ai_blueprint={"columns": [{"name": "date", "type": "datetime"}, {"name": "revenue", "type": "numeric"}]}
+        )
+        df_v2 = pd.DataFrame({
+            "date": pd.date_range("2026-07-01", periods=5),
+            "revenue": [10.0, 12.0, 11.0, 14.0, 15.0],
+            "new_column": ["A", "B", "A", "B", "A"]
+        })
+        
+        res = run_intelligent_analytics(df_v2, "Schema Test Dataset", "file", dataset_upload=dataset)
+        anoms = res.get("anomalies", [])
+        schema_anom = [a for a in anoms if a["type"] == "schema_change"]
+        self.assertTrue(len(schema_anom) > 0)
+        self.assertIn("Schema modified since version 1", schema_anom[0]["message"])
+        self.assertEqual(schema_anom[0]["confidence"], 1.0)
+        self.assertIn("what_happened", schema_anom[0])
+        self.assertIn("why_happened", schema_anom[0])
+
+    def test_category_shift_detection(self):
+        import pandas as pd
+        from analytics_assistant.intelligent_analytics import run_intelligent_analytics
+        
+        channels = ["A"] * 15 + ["B"] * 13 + ["C"] * 2
+        df = pd.DataFrame({
+            "date": pd.date_range("2026-07-01", periods=30),
+            "revenue": [10.0] * 30,
+            "channel": channels
+        })
+        res = run_intelligent_analytics(df, "Category Test", "file")
+        anoms = res.get("anomalies", [])
+        shifts = [a for a in anoms if a["type"] == "category_shift"]
+        self.assertTrue(len(shifts) > 0)
+        self.assertIn("shifted", shifts[0]["message"])
+
+    def test_trend_reversal_and_seasonality(self):
+        import pandas as pd
+        from analytics_assistant.intelligent_analytics import run_intelligent_analytics
+        
+        revenue = [10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 20, 18, 16, 14, 12]
+        df = pd.DataFrame({
+            "date": pd.date_range("2026-07-01", periods=15),
+            "revenue": revenue,
+            "channel": ["Meta"] * 15
+        })
+        res = run_intelligent_analytics(df, "Trend Test", "file")
+        highlights = res.get("business_highlights", [])
+        reversal_highlights = [h for h in highlights if "Trend Reversal" in h]
+        self.assertTrue(len(reversal_highlights) > 0)
+        
+        dates = pd.date_range("2026-07-01", periods=28)
+        revs = []
+        for d in dates:
+            if d.dayofweek >= 5:
+                revs.append(10.0)
+            else:
+                revs.append(100.0)
+        df_season = pd.DataFrame({
+            "date": dates,
+            "revenue": revs,
+            "channel": ["Meta"] * 28
+        })
+        res_season = run_intelligent_analytics(df_season, "Seasonality Test", "file")
+        highlights_season = res_season.get("business_highlights", [])
+        season_hl = [h for h in highlights_season if "seasonality" in h.lower()]
+        self.assertTrue(len(season_hl) > 0)
+
+    def test_root_cause_analysis(self):
+        import pandas as pd
+        from analytics_assistant.intelligent_analytics import run_intelligent_analytics
+        
+        df = pd.DataFrame({
+            "date": pd.date_range("2026-07-01", periods=6),
+            "revenue": [5, 5, 5, 5, 25, 25],
+            "channel": ["A", "B", "A", "B", "A", "B"]
+        })
+        res = run_intelligent_analytics(df, "Root Cause Test", "file")
+        contribs = res.get("contributors", [])
+        self.assertTrue(len(contribs) > 0)
+        self.assertEqual(contribs[0]["category"], "B")
+        self.assertTrue(contribs[0]["share_pct"] > 50)
+
+    def test_recommendations_and_questions_format(self):
+        import pandas as pd
+        from analytics_assistant.intelligent_analytics import run_intelligent_analytics
+        
+        df = pd.DataFrame({
+            "date": pd.date_range("2026-07-01", periods=10),
+            "revenue": [10.0] * 10,
+            "channel": ["Meta"] * 10
+        })
+        res = run_intelligent_analytics(df, "Recs Test", "file")
+        narratives = res.get("narratives", {})
+        recs = narratives.get("recommendations", [])
+        questions = narratives.get("suggested_questions", [])
+        
+        self.assertEqual(len(recs), 5)
+        self.assertEqual(len(questions), 5)
+        
+        for r in recs:
+            self.assertIn("Fact:", r)
+            self.assertIn("Recommendation:", r)
+            self.assertIn("Speculation:", r)
+
+    def test_contradiction_resolution(self):
+        import pandas as pd
+        from analytics_assistant.intelligent_analytics import run_intelligent_analytics
+        
+        # Test case: flat overall trend (net change is zero), but has sequential spikes and drops
+        df = pd.DataFrame({
+            "date": pd.date_range("2026-07-01", periods=5),
+            "revenue": [10.0, 15.0, 8.0, 12.0, 10.0],
+            "channel": ["Meta"] * 5
+        })
+        res = run_intelligent_analytics(df, "Contradiction Test", "file")
+        anoms = res.get("anomalies", [])
+        flat_anom = next((a for a in anoms if a["type"] == "flat"), None)
+        self.assertIsNotNone(flat_anom)
+        # Should note high daily volatility in the flat trend description
+        self.assertIn("sequential daily volatility", flat_anom["message"])
+        self.assertIn("cancelled each other out", flat_anom["why_happened"])
+
+
 
 
 

@@ -86,7 +86,7 @@ def persist_dataset_activation(
     row_count, blueprint, mode = activate_dataset(df, import_meta)
     
     from .intelligent_analytics import run_intelligent_analytics
-    insights = run_intelligent_analytics(df, name or (dataset_upload.name if dataset_upload else "Dataset"), source_type)
+    insights = run_intelligent_analytics(df, name or (dataset_upload.name if dataset_upload else "Dataset"), source_type, dataset_upload=dataset_upload)
     
     if dataset_upload:
         # We are uploading a new version of an existing dataset.

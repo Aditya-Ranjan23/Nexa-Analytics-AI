@@ -154,7 +154,8 @@ def analytics_summary(request):
                 insights = run_intelligent_analytics(
                     df,
                     state.active_upload.name or state.active_upload.display_name,
-                    state.active_upload.source_type
+                    state.active_upload.source_type,
+                    dataset_upload=state.active_upload
                 )
                 active_ver.insights_cache = insights
                 active_ver.save(update_fields=["insights_cache"])
@@ -970,7 +971,7 @@ def compare_version_insights(request, pk):
         dataset.stored_path = v1.stored_path
         try:
             df = load_active_dataframe(dataset)
-            v1.insights_cache = run_intelligent_analytics(df, dataset.name or dataset.display_name, v1.source_type)
+            v1.insights_cache = run_intelligent_analytics(df, dataset.name or dataset.display_name, v1.source_type, dataset_upload=dataset)
             v1.save(update_fields=["insights_cache"])
         finally:
             dataset.stored_path = old_path
@@ -981,7 +982,7 @@ def compare_version_insights(request, pk):
         dataset.stored_path = v2.stored_path
         try:
             df = load_active_dataframe(dataset)
-            v2.insights_cache = run_intelligent_analytics(df, dataset.name or dataset.display_name, v2.source_type)
+            v2.insights_cache = run_intelligent_analytics(df, dataset.name or dataset.display_name, v2.source_type, dataset_upload=dataset)
             v2.save(update_fields=["insights_cache"])
         finally:
             dataset.stored_path = old_path

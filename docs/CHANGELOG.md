@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### [0.7.0] — 2026-07-15 — Phase 7: Intelligent Analytics Engine
+
+### Added
+- **Intelligent Analytics Engine**: Created advanced proactive calculations in `intelligent_analytics.py` for autonomous data analysis.
+- **Statistical Anomaly Detection**: Implementation of non-ML statistical checks for missing values, duplicates, outliers (Z-score > 2.5), spikes/drops (sequential change > 25%), flat trends (change within 2%), category distribution shifts (value share change > 15%), and version-to-version schema changes.
+- **Severity Ranking & Impact Scoring**: Integrated anomaly severity mapping (`critical`/`high`/`medium`/`low`) and quantitative business impact calculation (variance shift, coverage gaps, record count inflation).
+- **Chronological Drivers & Explainability**: Added context-aware sub-segment analysis to automatically isolate the categories driving day-to-day spikes and drops.
+- **Contradiction Resolution**: Implemented automatic conflict resolution (e.g. merging flat trends and daily spikes/drops into volatility highlights and de-duplicating double-spikes).
+- **Trend Intelligence**: Added increase/decrease listings for all numeric fields, fastest growing and largest declining categories, day-of-week and monthly seasonality indicators, trend reversals, and growth acceleration/deceleration.
+- **Root Cause & Attribution**: Implemented Net KPI shift contribution analysis grouping by category to track drivers of change.
+- **Facts, Recommendations, & Speculations**: Formatted all heuristics recommendations into clearly demarcated "Fact: [...] Recommendation: [...] Speculation: [...]" blocks.
+- **Dynamic Suggested Questions**: Added dynamic column/metric-aware question prompts.
+- **Narrative Fallback Briefings**: Structured standard narrative briefing block (Executive, Management, Operational, Risk, Opportunity) with premium paragraph flow.
+- **Glassmorphic UI Presentation**: Upgraded `dashboard.js` render loops to display severity badges, explainability drivers, and yellow business impact markers.
+- **Integration Tests**: Added 6 verification test methods including `test_contradiction_resolution` and severity-sorting checks.
+
+---
+
 ### [0.6.0] — 2026-07-15 — Universal Connector Framework & Premium Navigation
 
 ### Added
