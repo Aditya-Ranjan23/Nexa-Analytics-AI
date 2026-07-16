@@ -1,5 +1,17 @@
 import re
-import psycopg
+import sys
+from types import ModuleType
+
+try:
+    import psycopg
+except ModuleNotFoundError:  # pragma: no cover - fallback for test environments without psycopg
+    psycopg = ModuleType("psycopg")
+
+    def _missing_connect(*args, **kwargs):
+        raise ModuleNotFoundError("No module named 'psycopg'")
+
+    psycopg.connect = _missing_connect
+    sys.modules.setdefault("psycopg", psycopg)
 import pandas as pd
 
 from .base import BaseConnector
