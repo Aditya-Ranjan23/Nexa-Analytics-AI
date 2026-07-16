@@ -1,12 +1,12 @@
 from unittest.mock import patch, MagicMock
 from django.test import TestCase
 
-from .connectors.registry import ConnectorRegistry
-from .connectors.base import BaseConnector
-from .connectors.postgres import PostgresConnector
-from .connectors.mysql import MySQLConnector
-from .connectors.sqlite import SQLiteConnector
-from .connectors.sqlserver import SQLServerConnector
+from analytics_assistant.connectors.registry import ConnectorRegistry
+from analytics_assistant.connectors.base import BaseConnector
+from analytics_assistant.connectors.postgres import PostgresConnector
+from analytics_assistant.connectors.mysql import MySQLConnector
+from analytics_assistant.connectors.sqlite import SQLiteConnector
+from analytics_assistant.connectors.sqlserver import SQLServerConnector
 
 class RegistryTests(TestCase):
     def test_registry_registration(self):
@@ -63,7 +63,7 @@ class MySQLConnectorTests(TestCase):
         mock_connect.return_value = mock_conn
         
         # In case pymysql isn't installed, we might get an ImportError
-        from .connectors.mysql import HAS_PYMYSQL
+        from analytics_assistant.connectors.mysql import HAS_PYMYSQL
         if not HAS_PYMYSQL:
             self.skipTest("pymysql not installed")
             
@@ -96,7 +96,7 @@ class SQLServerConnectorTests(TestCase):
         mock_conn = MagicMock()
         mock_connect.return_value = mock_conn
         
-        from .connectors.sqlserver import HAS_PYODBC
+        from analytics_assistant.connectors.sqlserver import HAS_PYODBC
         if not HAS_PYODBC:
             self.skipTest("pyodbc not installed")
             

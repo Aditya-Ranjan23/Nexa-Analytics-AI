@@ -4,7 +4,7 @@ import pandas as pd
 
 from .base import BaseConnector
 from .registry import ConnectorRegistry
-from ..crypto import decrypt_password
+from analytics_assistant.crypto import decrypt_password
 
 
 @ConnectorRegistry.register("postgres")
