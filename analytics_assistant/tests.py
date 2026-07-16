@@ -1045,11 +1045,11 @@ class ConnectorPipelineTests(TestCase):
         dummy_req = type("Req", (), {"user": self.user})()
         self.workspace = resolve_active_workspace(dummy_req)
 
-    @patch("analytics_assistant.connector_pipeline.psycopg.connect")
-    def test_test_postgres_connection_success(self, mock_connect):
+    @patch("analytics_assistant.connector_pipeline.get_postgres_connection")
+    def test_test_postgres_connection_success(self, mock_get_conn):
         from analytics_assistant.connector_pipeline import test_postgres_connection
         mock_conn = MagicMock()
-        mock_connect.return_value = mock_conn
+        mock_get_conn.return_value = mock_conn
 
         config = {
             "host": "localhost",
@@ -1060,17 +1060,17 @@ class ConnectorPipelineTests(TestCase):
         }
         success, msg = test_postgres_connection(config)
         self.assertTrue(success)
-        mock_connect.assert_called_once()
+        mock_get_conn.assert_called_once_with(config)
         mock_conn.close.assert_called_once()
 
-    @patch("analytics_assistant.connector_pipeline.psycopg.connect")
-    def test_discover_postgres_tables(self, mock_connect):
+    @patch("analytics_assistant.connector_pipeline.get_postgres_connection")
+    def test_discover_postgres_tables(self, mock_get_conn):
         from analytics_assistant.connector_pipeline import discover_postgres_tables
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         mock_cur.fetchall.return_value = [("users",), ("sales_data",)]
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
-        mock_connect.return_value = mock_conn
+        mock_get_conn.return_value = mock_conn
 
         config = {
             "host": "localhost",
@@ -1081,9 +1081,10 @@ class ConnectorPipelineTests(TestCase):
         }
         tables = discover_postgres_tables(config)
         self.assertEqual(tables, ["users", "sales_data"])
+        mock_get_conn.assert_called_once_with(config)
 
-    @patch("analytics_assistant.connector_pipeline.psycopg.connect")
-    def test_fetch_postgres_table_data(self, mock_connect):
+    @patch("analytics_assistant.connector_pipeline.get_postgres_connection")
+    def test_fetch_postgres_table_data(self, mock_get_conn):
         from analytics_assistant.connector_pipeline import fetch_postgres_table_data
         mock_conn = MagicMock()
         mock_cur = MagicMock()
@@ -1093,7 +1094,7 @@ class ConnectorPipelineTests(TestCase):
             ("2026-01-02", 200.0, 10, 40.0, 0.06, "facebook"),
         ]
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
-        mock_connect.return_value = mock_conn
+        mock_get_conn.return_value = mock_conn
 
         config = {
             "host": "localhost",
@@ -1105,9 +1106,10 @@ class ConnectorPipelineTests(TestCase):
         df = fetch_postgres_table_data(config, "sales_data")
         self.assertEqual(df.shape, (2, 6))
         self.assertEqual(list(df.columns), ["date", "revenue", "orders", "ad_spend", "conversion_rate", "channel"])
+        mock_get_conn.assert_called_once_with(config)
 
-    @patch("analytics_assistant.connector_pipeline.psycopg.connect")
-    def test_sync_dataset_postgres_increments_version(self, mock_connect):
+    @patch("analytics_assistant.connector_pipeline.get_postgres_connection")
+    def test_sync_dataset_postgres_increments_version(self, mock_get_conn):
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         mock_cur.description = [("date",), ("revenue",), ("orders",), ("ad_spend",), ("conversion_rate",), ("channel",)]
@@ -1116,7 +1118,7 @@ class ConnectorPipelineTests(TestCase):
             ("2026-01-02", 200.0, 10, 40.0, 0.06, "facebook"),
         ]
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
-        mock_connect.return_value = mock_conn
+        mock_get_conn.return_value = mock_conn
 
         dataset = DatasetUpload.objects.create(
             workspace=self.workspace,
