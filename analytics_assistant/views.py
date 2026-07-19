@@ -204,7 +204,7 @@ def dataset_upload(request):
 
     try:
         result = process_file_upload(request, upload)
-        return Response(result, status=status.HTTP_200_OK)
+        return Response(result, status=status.HTTP_202_ACCEPTED)
     except ValueError as exc:
         detail = str(exc)
         if detail.startswith("Schema validation failed"):
@@ -232,7 +232,7 @@ def dataset_upload_link(request):
     source_url = serializer.validated_data["url"]
     try:
         result = process_url_upload(request, source_url)
-        return Response(result, status=status.HTTP_200_OK)
+        return Response(result, status=status.HTTP_202_ACCEPTED)
     except ValueError as exc:
         detail = str(exc)
         if detail.startswith("Schema validation failed"):
@@ -445,7 +445,7 @@ def dataset_upload_version(request, pk):
 
     try:
         result = process_file_upload(request, upload, dataset_upload=dataset)
-        return Response(result, status=status.HTTP_200_OK)
+        return Response(result, status=status.HTTP_202_ACCEPTED)
     except ValueError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as exc:
@@ -462,7 +462,7 @@ def dataset_url_version(request, pk):
 
     try:
         result = process_url_upload(request, url, dataset_upload=dataset)
-        return Response(result, status=status.HTTP_200_OK)
+        return Response(result, status=status.HTTP_202_ACCEPTED)
     except ValueError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as exc:
@@ -859,9 +859,13 @@ def ingest_connector_table(request):
     }
 
     try:
+        logger.info(f"ingest_connector_table: Starting dataset ingest from {engine} table '{table}'")
         df = fetch_table_data(engine, config, table)
+        logger.info(f"ingest_connector_table: fetch_table_data succeeded, df shape={df.shape}")
+        
         is_valid, missing, _ = validate_dataset_columns(df.columns.tolist())
         if not is_valid:
+            logger.error(f"ingest_connector_table: Schema validation failed, missing: {missing}")
             return Response({"error": f"Schema validation failed: missing columns {', '.join(missing)}"}, status=status.HTTP_400_BAD_REQUEST)
 
         safe_name = re.sub(r"[^a-zA-Z0-9_]", "_", name)
@@ -873,6 +877,7 @@ def ingest_connector_table(request):
         stored_file_path = Path(settings.MEDIA_ROOT) / storage_name
         import_meta = {"format": engine, "table": table}
 
+        logger.info(f"ingest_connector_table: Calling persist_dataset_activation for '{name}'")
         res = persist_dataset_activation(
             request,
             source_type=engine,
@@ -885,12 +890,16 @@ def ingest_connector_table(request):
 
         dataset_id = res.get("upload_id")
         if dataset_id:
+            logger.info(f"ingest_connector_table: Successfully generated DatasetUpload id={dataset_id}")
             dataset_upload = DatasetUpload.objects.get(id=dataset_id)
             dataset_upload.connection_config = config
             dataset_upload.save(update_fields=["connection_config"])
+        else:
+            logger.warning("ingest_connector_table: persist_dataset_activation completed but returned no upload_id")
 
         return Response(res, status=status.HTTP_200_OK)
     except Exception as e:
+        logger.error(f"ingest_connector_table: Exception during dataset ingest: {str(e)}", exc_info=True)
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -900,10 +909,15 @@ def sync_dataset(request, pk):
     from .request_context import user_dataset_queryset
     dataset = get_object_or_404(user_dataset_queryset(request), pk=pk)
 
-    from .connector_pipeline import sync_dataset_source
+    from analytics_assistant.jobs.dispatcher import enqueue_job
     try:
-        res = sync_dataset_source(request, dataset)
-        return Response(res, status=status.HTTP_200_OK)
+        job = enqueue_job(
+            job_type="sync_dataset",
+            workspace=dataset.workspace,
+            dataset_upload=dataset,
+            created_by=request.user if request.user.is_authenticated else None
+        )
+        return Response({"success": True, "job_id": str(job.id), "status": "queued"}, status=status.HTTP_202_ACCEPTED)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1027,3 +1041,65 @@ def compare_version_insights(request, pk):
         "v1": v1.insights_cache,
         "v2": v2.insights_cache
     }, status=status.HTTP_200_OK)
+
+
+# ----------------------------------------------------------------------
+# Background Jobs API
+# ----------------------------------------------------------------------
+from .models import BackgroundJob
+
+@api_view(["GET"])
+def job_list(request):
+    from .request_context import ownership_filter_kwargs
+    jobs = BackgroundJob.objects.filter(**ownership_filter_kwargs(request))
+    data = []
+    for j in jobs:
+        data.append({
+            "id": j.id,
+            "job_type": j.job_type,
+            "status": j.status,
+            "current_stage": j.current_stage,
+            "progress": j.progress,
+            "error_message": j.error_message,
+            "created_at": j.created_at.isoformat(),
+            "completed_at": j.completed_at.isoformat() if j.completed_at else None,
+        })
+    return Response(data, status=status.HTTP_200_OK)
+
+@api_view(["GET"])
+def job_detail(request, pk):
+    from .request_context import ownership_filter_kwargs
+    job = get_object_or_404(BackgroundJob.objects.filter(**ownership_filter_kwargs(request)), pk=pk)
+    return Response({
+        "id": job.id,
+        "job_type": job.job_type,
+        "status": job.status,
+        "current_stage": job.current_stage,
+        "progress": job.progress,
+        "error_message": job.error_message,
+        "created_at": job.created_at.isoformat(),
+        "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+        "result_metadata": job.result_metadata,
+    }, status=status.HTTP_200_OK)
+
+@api_view(["POST"])
+def job_cancel(request, pk):
+    from .request_context import ownership_filter_kwargs
+    job = get_object_or_404(BackgroundJob.objects.filter(**ownership_filter_kwargs(request)), pk=pk)
+    if job.status in ["queued", "running"]:
+        job.status = "cancelled"
+        job.save(update_fields=["status"])
+        return Response({"success": True, "status": "cancelled"}, status=status.HTTP_200_OK)
+    return Response({"error": "Job cannot be cancelled in its current state."}, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(["POST"])
+def job_retry(request, pk):
+    from .request_context import ownership_filter_kwargs
+    job = get_object_or_404(BackgroundJob.objects.filter(**ownership_filter_kwargs(request)), pk=pk)
+    if job.status in ["failed", "cancelled"]:
+        job.status = "queued"
+        job.progress = 0
+        job.error_message = ""
+        job.save(update_fields=["status", "progress", "error_message"])
+        return Response({"success": True, "status": "queued"}, status=status.HTTP_200_OK)
+    return Response({"error": "Job cannot be retried in its current state."}, status=status.HTTP_400_BAD_REQUEST)

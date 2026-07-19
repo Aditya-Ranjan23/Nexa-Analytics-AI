@@ -102,3 +102,43 @@ class SQLServerConnectorTests(TestCase):
             
         success, msg = self.connector.test_connection(self.config)
         self.assertTrue(success)
+
+from rest_framework.test import APIClient
+from django.urls import reverse
+import pandas as pd
+from analytics_assistant.models import DatasetUpload, DatasetVersion
+
+class SQLServerIntegrationTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.url = reverse('ingest_connector_table')
+        
+    @patch('analytics_assistant.connector_pipeline.fetch_table_data')
+    def test_sqlserver_ingestion_pipeline(self, mock_fetch):
+        # Mock fetch_table_data to return a valid DataFrame
+        df = pd.DataFrame({'id': [1, 2], 'name': ['test1', 'test2']})
+        mock_fetch.return_value = df
+        
+        payload = {
+            "engine": "sqlserver",
+            "server": "localhost",
+            "database": "test_db",
+            "table": "dbo.test_table",
+            "name": "SQL Server Ingest Test"
+        }
+        
+        response = self.client.post(self.url, data=payload, format='json')
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify DatasetUpload was created
+        upload_id = response.data.get('upload_id')
+        self.assertIsNotNone(upload_id)
+        
+        upload = DatasetUpload.objects.get(id=upload_id)
+        self.assertEqual(upload.name, "SQL Server Ingest Test")
+        self.assertEqual(upload.source_type, "sqlserver")
+        
+        # Verify DatasetVersion was created via persist_dataset_activation
+        version = DatasetVersion.objects.filter(dataset=upload).first()
+        self.assertIsNotNone(version)
+        self.assertEqual(version.row_count, 2)

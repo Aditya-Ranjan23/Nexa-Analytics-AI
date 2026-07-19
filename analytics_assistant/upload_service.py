@@ -13,7 +13,7 @@ from django.core.files.uploadedfile import UploadedFile
 
 from .data_loaders import load_tabular_from_path
 from .dataset_profile import profile_for_blueprint
-from .models import DatasetUpload, DatasetVersion
+from .models import DatasetUpload, DatasetVersion, DashboardState
 from .request_context import resolve_dashboard_state, ownership_filter_kwargs
 from .schema import validate_dataset_columns
 from .services import generate_dashboard_blueprint
@@ -72,7 +72,7 @@ def activate_dataset(df: pd.DataFrame, import_meta: dict | None = None) -> tuple
 
 
 def persist_dataset_activation(
-    request,
+    request=None,
     *,
     source_type: str,
     stored_path: Path,
@@ -123,7 +123,11 @@ def persist_dataset_activation(
         )
         
         # 4. Make it active state
-        state = resolve_dashboard_state(request)
+        if request:
+            state = resolve_dashboard_state(request)
+        else:
+            state, _ = DashboardState.objects.get_or_create(workspace=dataset_upload.workspace, user=dataset_upload.owner)
+        
         state.active_upload = dataset_upload
         state.blueprint_override = {}
         state.save(update_fields=["active_upload", "blueprint_override", "updated_at"])
@@ -166,8 +170,14 @@ def persist_dataset_activation(
             create_kwargs["source_url"] = source_url
 
         create_kwargs.update(ownership_filter_kwargs(request))
-        if request.user.is_authenticated:
+        if request and request.user.is_authenticated:
             create_kwargs["owner"] = request.user
+        
+        if request:
+            from .request_context import resolve_active_workspace
+            create_kwargs["workspace"] = resolve_active_workspace(request)
+            if not request.user.is_authenticated:
+                create_kwargs["session_key"] = request.session.session_key
 
         upload_record = DatasetUpload.objects.create(**create_kwargs)
         
@@ -185,7 +195,11 @@ def persist_dataset_activation(
             insights_cache=insights,
         )
         
-        state = resolve_dashboard_state(request)
+        if request:
+            state = resolve_dashboard_state(request)
+        else:
+            state, _ = DashboardState.objects.get_or_create(workspace=upload_record.workspace, user=upload_record.owner)
+        
         state.active_upload = upload_record
         state.blueprint_override = {}
         state.save(update_fields=["active_upload", "blueprint_override", "updated_at"])
@@ -225,28 +239,47 @@ def process_file_upload(request, upload: UploadedFile, dataset_upload: DatasetUp
     stored_file_path = Path(settings.MEDIA_ROOT) / storage_name
 
     _validate_mime_type(stored_file_path)
+    
+    # Pre-create or update DatasetUpload for the background job
+    from .request_context import resolve_active_workspace
+    if not dataset_upload:
+        create_kwargs = {
+            "source_type": "file",
+            "stored_path": str(stored_file_path),
+            "file": storage_name,
+            "status": "queued",
+            "name": upload.name,
+        }
+        create_kwargs.update(ownership_filter_kwargs(request))
+        if request and request.user.is_authenticated:
+            create_kwargs["owner"] = request.user
+        
+        if request:
+            create_kwargs["workspace"] = resolve_active_workspace(request)
+            if not request.user.is_authenticated:
+                create_kwargs["session_key"] = request.session.session_key
+                
+        dataset_upload = DatasetUpload.objects.create(**create_kwargs)
+    else:
+        dataset_upload.stored_path = str(stored_file_path)
+        dataset_upload.file = storage_name
+        dataset_upload.status = "queued"
+        dataset_upload.save(update_fields=["stored_path", "file", "status"])
 
-    df, import_meta = load_tabular_from_path(stored_file_path)
-    is_valid, missing, _mode = validate_dataset_columns(df.columns.tolist())
-    if not is_valid:
-        record_failed_upload(
-            source_type="file",
-            file=storage_name,
-            stored_path=str(stored_file_path),
-            error_message=f"Missing columns: {', '.join(missing)}",
-        )
-        raise ValueError(f"Schema validation failed: {', '.join(missing)}")
-
-    return persist_dataset_activation(
-        request,
-        source_type="file",
-        stored_path=stored_file_path,
-        df=df,
-        import_meta=import_meta,
-        file_field=storage_name,
-        name=upload.name,
-        dataset_upload=dataset_upload,
+    # Dispatch to background
+    from .jobs.dispatcher import enqueue_job
+    job = enqueue_job(
+        job_type="process_upload",
+        workspace=dataset_upload.workspace,
+        created_by=dataset_upload.owner if hasattr(dataset_upload, 'owner') else None,
+        dataset_upload=dataset_upload
     )
+    
+    return {
+        "detail": "Dataset upload queued.",
+        "job_id": job.id,
+        "upload_id": dataset_upload.id,
+    }
 
 
 def fetch_url_content(source_url: str) -> tuple[bytes, str]:
@@ -271,26 +304,44 @@ def process_url_upload(request, source_url: str, dataset_upload: DatasetUpload =
     content, suffix = fetch_url_content(source_url)
     temp_name = default_storage.save(f"datasets/from_url{suffix}", ContentFile(content))
     temp_path = Path(settings.MEDIA_ROOT) / temp_name
-
-    df, import_meta = load_tabular_from_path(temp_path)
-    is_valid, missing, _mode = validate_dataset_columns(df.columns.tolist())
-    if not is_valid:
-        record_failed_upload(
-            source_type="url",
-            source_url=source_url,
-            stored_path=str(temp_path),
-            error_message=f"Missing columns: {', '.join(missing)}",
-        )
-        raise ValueError(f"Schema validation failed: {', '.join(missing)}")
-
+    
     url_name = Path(urlparse(source_url).path).name or f"from_url{suffix}"
-    return persist_dataset_activation(
-        request,
-        source_type="url",
-        stored_path=temp_path,
-        df=df,
-        import_meta=import_meta,
-        source_url=source_url,
-        name=url_name,
-        dataset_upload=dataset_upload,
+
+    from .request_context import resolve_active_workspace
+    if not dataset_upload:
+        create_kwargs = {
+            "source_type": "url",
+            "stored_path": str(temp_path),
+            "source_url": source_url,
+            "status": "queued",
+            "name": url_name,
+        }
+        create_kwargs.update(ownership_filter_kwargs(request))
+        if request and request.user.is_authenticated:
+            create_kwargs["owner"] = request.user
+        
+        if request:
+            create_kwargs["workspace"] = resolve_active_workspace(request)
+            if not request.user.is_authenticated:
+                create_kwargs["session_key"] = request.session.session_key
+                
+        dataset_upload = DatasetUpload.objects.create(**create_kwargs)
+    else:
+        dataset_upload.stored_path = str(temp_path)
+        dataset_upload.source_url = source_url
+        dataset_upload.status = "queued"
+        dataset_upload.save(update_fields=["stored_path", "source_url", "status"])
+
+    from .jobs.dispatcher import enqueue_job
+    job = enqueue_job(
+        job_type="process_upload",
+        workspace=dataset_upload.workspace,
+        created_by=dataset_upload.owner if hasattr(dataset_upload, 'owner') else None,
+        dataset_upload=dataset_upload
     )
+    
+    return {
+        "detail": "Dataset URL ingestion queued.",
+        "job_id": job.id,
+        "upload_id": dataset_upload.id,
+    }

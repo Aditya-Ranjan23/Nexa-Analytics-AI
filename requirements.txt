@@ -24,3 +24,6 @@ charset-normalizer==2.0.12   # Required by requests
 idna==3.10                   # Required by requests
 urllib3==1.26.20             # Required by requests
 et_xmlfile==2.0.0            # Required by openpyxl
+
+setuptools>=80
+gunicorn>=23.0.0

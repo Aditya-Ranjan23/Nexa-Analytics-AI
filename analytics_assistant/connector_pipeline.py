@@ -48,10 +48,17 @@ def sync_dataset_source(request, dataset_upload: DatasetUpload) -> dict:
         config = dataset_upload.connection_config
         table_name = config.get("table")
         if not table_name:
+            logger.error("sync_dataset_source: No database table configured for this dataset.")
             raise ValueError("No database table configured for this dataset.")
             
+        logger.info(f"sync_dataset_source: Pulling fresh table data for dataset_id={dataset_upload.id}, engine={source_type}, table={table_name}")
         # Pull fresh table data using the connector framework
-        df = fetch_table_data(source_type, config, table_name)
+        try:
+            df = fetch_table_data(source_type, config, table_name)
+            logger.info(f"sync_dataset_source: Fetched DataFrame with shape {df.shape}")
+        except Exception as e:
+            logger.error(f"sync_dataset_source: Failed to fetch table data: {str(e)}", exc_info=True)
+            raise
         
         # Check for schema changes
         old_cols = [c["name"] for c in dataset_upload.ai_blueprint.get("columns", [])]
@@ -76,19 +83,26 @@ def sync_dataset_source(request, dataset_upload: DatasetUpload) -> dict:
         # Validate columns
         is_valid, missing, _ = validate_dataset_columns(df.columns.tolist())
         if not is_valid:
+            logger.error(f"sync_dataset_source: Schema validation failed, missing columns: {missing}")
             raise ValueError(f"Schema validation failed: missing columns {', '.join(missing)}")
             
         # Run activation and save version
-        res = persist_dataset_activation(
-            request,
-            source_type=source_type,
-            stored_path=stored_file_path,
-            df=df,
-            import_meta=import_meta,
-            file_field=storage_name,
-            name=dataset_upload.name,
-            dataset_upload=dataset_upload,
-        )
+        logger.info(f"sync_dataset_source: Generating DatasetVersion via persist_dataset_activation")
+        try:
+            res = persist_dataset_activation(
+                request,
+                source_type=source_type,
+                stored_path=stored_file_path,
+                df=df,
+                import_meta=import_meta,
+                file_field=storage_name,
+                name=dataset_upload.name,
+                dataset_upload=dataset_upload,
+            )
+            logger.info(f"sync_dataset_source: Successfully activated dataset version for upload_id={dataset_upload.id}")
+        except Exception as e:
+            logger.error(f"sync_dataset_source: persist_dataset_activation failed: {str(e)}", exc_info=True)
+            raise
         
         # Update last_sync_at
         dataset_upload.last_sync_at = timezone.now()

@@ -500,8 +500,8 @@ class UploadApiTests(TestCase):
             {"file": fake_file},
             format="multipart",
         )
-        # Should succeed (200) or fail with schema error (400) — not a 500.
-        self.assertIn(response.status_code, [200, 400])
+        # Since we decoupled, it returns 202
+        self.assertIn(response.status_code, [202, 400])
         if response.status_code == 400:
             self.assertIn("detail", response.json())
 
@@ -738,7 +738,18 @@ class DatasetManagementTests(TestCase):
             {"file": fake_file},
             format="multipart",
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
+        
+        job_id = response.data.get("job_id")
+        self.assertIsNotNone(job_id)
+        
+        from analytics_assistant.models import BackgroundJob
+        from analytics_assistant.jobs.handlers import JOB_HANDLERS
+        
+        job = BackgroundJob.objects.get(id=job_id)
+        handler = JOB_HANDLERS.get(job.job_type)
+        handler(job)
+        
         self.dataset_a.refresh_from_db()
         self.assertEqual(self.dataset_a.active_version_number, 2)
         self.assertEqual(self.dataset_a.versions.count(), 2)

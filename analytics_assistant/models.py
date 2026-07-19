@@ -204,7 +204,9 @@ class DatasetVersion(models.Model):
     stored_path = models.CharField(max_length=255, blank=True, default="")
     row_count = models.IntegerField(default=0)
     ai_blueprint = models.JSONField(default=dict, blank=True)
-    insights_cache = models.JSONField(default=dict, blank=True, null=True)
+    insights_cache = models.JSONField(default=dict, blank=True)
+    cleaning_report = models.JSONField(default=dict, blank=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -275,6 +277,64 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return f"Profile for {self.user.username}"
+
+
+import uuid
+
+class BackgroundJob(models.Model):
+    """
+    Generic job model for asynchronous tasks (e.g., sync_dataset, generate_insights).
+    """
+    JOB_STATUS_CHOICES = (
+        ("queued", "Queued"),
+        ("running", "Running"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
+        ("cancelled", "Cancelled"),
+    )
+    RECURRENCE_CHOICES = (
+        ("none", "None"),
+        ("hourly", "Hourly"),
+        ("daily", "Daily"),
+        ("weekly", "Weekly"),
+        ("monthly", "Monthly"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    job_type = models.CharField(max_length=64)
+    status = models.CharField(max_length=16, choices=JOB_STATUS_CHOICES, default="queued")
+    
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, null=True, blank=True, related_name="jobs")
+    dataset_upload = models.ForeignKey(DatasetUpload, on_delete=models.SET_NULL, null=True, blank=True, related_name="jobs")
+    connector = models.CharField(max_length=64, blank=True, default="")
+    
+    current_stage = models.CharField(max_length=150, blank=True, default="")
+    progress = models.IntegerField(default=0)  # 0 to 100
+    error_message = models.TextField(blank=True, default="")
+    
+    retry_count = models.IntegerField(default=0)
+    max_retries = models.IntegerField(default=0)
+    
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_jobs"
+    )
+    result_metadata = models.JSONField(default=dict, blank=True)
+    
+    scheduled_at = models.DateTimeField(null=True, blank=True)
+    recurrence = models.CharField(max_length=16, choices=RECURRENCE_CHOICES, default="none")
+    
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    duration_seconds = models.FloatField(null=True, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.job_type} [{self.status}] (ID: {self.id})"
 
 
 from django.db.models.signals import post_save

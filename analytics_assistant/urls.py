@@ -34,6 +34,10 @@ from .views import (
     api_register,
     custom_logout,
     compare_version_insights,
+    job_list,
+    job_detail,
+    job_cancel,
+    job_retry,
 )
 
 urlpatterns = [
@@ -86,4 +90,10 @@ urlpatterns = [
     path("api/data/connectors/ingest/", ingest_connector_table, name="ingest_connector_table"),
     path("api/data/datasets/<int:pk>/sync/", sync_dataset, name="sync_dataset"),
     path("api/data/datasets/<int:pk>/versions/compare_insights/", compare_version_insights, name="compare_version_insights"),
+
+    # Background Jobs API
+    path("api/jobs/", job_list, name="job_list"),
+    path("api/jobs/<uuid:pk>/", job_detail, name="job_detail"),
+    path("api/jobs/<uuid:pk>/cancel/", job_cancel, name="job_cancel"),
+    path("api/jobs/<uuid:pk>/retry/", job_retry, name="job_retry"),
 ]
